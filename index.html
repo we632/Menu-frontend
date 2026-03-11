@@ -501,9 +501,35 @@ body.preview-open{overflow:hidden}
   display:flex;
   align-items:center;
   justify-content:space-between;
+  gap:10px;
   margin-bottom:12px;
   padding-bottom:10px;
   border-bottom:1px solid #f1f1f1;
+}
+
+.cart-item-main{
+  min-width:0;
+  flex:1;
+}
+
+.cart-item-name{
+  font-size:14px;
+  font-weight:800;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.cart-item-meta{
+  margin-top:4px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+
+.cart-item-price{
+  font-size:13px;
+  color:#6b7280;
 }
 
 .cart-item-img{
@@ -516,7 +542,40 @@ body.preview-open{overflow:hidden}
 
 .cart-item-qty{
   font-weight:900;
-  font-size:16px;
+  font-size:12px;
+  color:#374151;
+  background:#f3f4f6;
+  border-radius:999px;
+  padding:3px 8px;
+}
+
+.cart-item-stepper{
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+
+.cart-step-btn{
+  width:30px;
+  height:30px;
+  border:none;
+  border-radius:8px;
+  color:#fff;
+  font-size:18px;
+  font-weight:900;
+  cursor:pointer;
+  background:linear-gradient(135deg,var(--brand),#ff9f7f);
+}
+
+.cart-step-btn.minus{
+  background:#374151;
+}
+
+.cart-step-number{
+  min-width:20px;
+  text-align:center;
+  font-size:14px;
+  font-weight:900;
 }
 #cartTotalPrice{
   margin-top:6px;
@@ -1216,6 +1275,20 @@ const cartTotalEl = document.getElementById("cartTotal");
 const cartTotalPriceEl = document.getElementById("cartTotalPrice");
 const cartDiscountPriceEl = document.getElementById("cartDiscountPrice");
 
+cartItemsEl?.addEventListener("click", (e)=>{
+  const stepBtn = e.target.closest(".cart-step-btn");
+  if (!stepBtn) return;
+
+  const sku = decodeURIComponent(String(stepBtn.dataset.sku || "").trim());
+  if (!sku) return;
+
+  if (stepBtn.classList.contains("plus")){
+    setQty(sku, getQty(sku) + 1);
+  }else if (stepBtn.classList.contains("minus")){
+    setQty(sku, getQty(sku) - 1);
+  }
+});
+
 const promotionModal = document.getElementById("promotionModal");
 const promotionCloseBtn = document.getElementById("promotionClose");
 const promotionApplyBtn = document.getElementById("promotionApply");
@@ -1466,7 +1539,18 @@ function renderCartPreview(){
     wrapper.className = "cart-item-row";
     wrapper.innerHTML = `
       <img src="${imgEl?.src || ""}" class="cart-item-img" alt="">
-      <div class="cart-item-qty">× ${qty}</div>
+      <div class="cart-item-main">
+        <div class="cart-item-name">${escapeHtml(meta?.name || sku)}</div>
+        <div class="cart-item-meta">
+          <div class="cart-item-price">${fmtPrice(unitPrice)} each</div>
+          <div class="cart-item-qty">Qty: ${qty}</div>
+        </div>
+      </div>
+      <div class="cart-item-stepper">
+        <button class="cart-step-btn minus" type="button" data-sku="${encodeURIComponent(sku)}">−</button>
+        <div class="cart-step-number">${qty}</div>
+        <button class="cart-step-btn plus" type="button" data-sku="${encodeURIComponent(sku)}">+</button>
+      </div>
     `;
     cartItemsEl.appendChild(wrapper);
   });

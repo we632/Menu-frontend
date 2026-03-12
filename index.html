@@ -1110,16 +1110,21 @@ function getBadgeMeta(product){
   }
 
   const stockStatus = String(product?.stock_status || "").toLowerCase();
-  const isOutByStatus = stockStatus === "out_of_stock" || stockStatus === "non_orderable";
+  const dailyRemainingRaw = Number(product?.daily_remaining);
+  const hasDailyRemaining = Number.isFinite(dailyRemainingRaw);
+  const dailyRemaining = hasDailyRemaining ? dailyRemainingRaw : Number.POSITIVE_INFINITY;
+  const isSoldOutToday = hasDailyRemaining && dailyRemaining <= 0;
+  const isOutByStatus = stockStatus === "out_of_stock" || stockStatus === "non_orderable" || stockStatus === "sold_out";
   const isOutByFlag = product?.orderable === false || product?.is_orderable === false;
   const isOutByText = isUnavailableBadgeText(badgeText);
-  const isOutOfStock = isOutByStatus || isOutByFlag || isOutByText;
-  const isComingSoon = isComingSoonBadgeText(badgeText);
+  const isOutOfStock = isSoldOutToday || isOutByStatus || isOutByFlag || isOutByText;
+  const isComingSoon = isComingSoonBadgeText(badgeText) && !isSoldOutToday;
 
   if (isOutOfStock){
+    const soldOutText = "Sold Out";
     return {
       type: isComingSoon ? "soon" : "oos",
-      text: badgeText || (isComingSoon ? "Coming Up Soon" : "Out of Stock"),
+      text: isComingSoon ? (badgeText || "Coming Up Soon") : (isSoldOutToday ? soldOutText : (badgeText || "Out of Stock")),
       icon: isComingSoon ? "🔜" : "⛔",
       unavailable: true,
     };
@@ -1222,7 +1227,7 @@ function updateQtyControls(){
       const typeClass = unavailableType ? ` qty-unavailable-${unavailableType}` : "";
       let text = "UNAVAILABLE";
       if (unavailableType === "soon") text = "COMING SOON";
-      else if (unavailableType === "oos") text = "OUT OF STOCK";
+      else if (unavailableType === "oos") text = "SOLD OUT";
       else if (unavailableType === "promo") text = "PROMOTION";
       container.innerHTML = `<span class="qty-unavailable${typeClass}" title="${escapeHtml(reason)}">${text}</span>`;
       return;
@@ -1586,6 +1591,17 @@ async function postJson(url, body, extraHeaders = {}){
   return data;
 }
 
+
+async function refreshProductsForStockState(){
+  try{
+    const products = await loadProducts();
+    renderMenu(products);
+    updateUI();
+  }catch(err){
+    console.error("refresh products failed", err);
+  }
+}
+
 function closeActionModal(result = null){
   actionModal.classList.remove("open");
   actionModal.setAttribute("aria-hidden", "true");
@@ -1693,6 +1709,7 @@ sellBtnEl.addEventListener("click", async ()=>{
     for(const k of Object.keys(cart)) delete cart[k];
     discountAmountBySku.clear();
     closePromotionModal();
+    await refreshProductsForStockState();
     updateUI();
     if (cartDrawer.classList.contains("open")) cartDrawer.classList.remove("open");
 
@@ -1743,6 +1760,7 @@ giftBtnEl?.addEventListener("click", async ()=>{
     for(const k of Object.keys(cart)) delete cart[k];
     discountAmountBySku.clear();
     closePromotionModal();
+    await refreshProductsForStockState();
     updateUI();
     if (cartDrawer.classList.contains("open")) cartDrawer.classList.remove("open");
 
@@ -1889,7 +1907,7 @@ function renderMenu(products){
     for (const p of items){
       const badge = getBadgeMeta(p);
       const badgeText = badge?.text || "";
-      const showNameBadge = badge && badge.unavailable !== true;
+      const showNameBadge = badge && (badge.unavailable !== true || badge.type === "oos");
       const badgeHtml = showNameBadge
         ? `<span class="item-badge item-badge-${badge.type}"><span class="item-badge-icon" aria-hidden="true">${badge.icon}</span>${escapeHtml(badge.text)}</span>`
         : "";

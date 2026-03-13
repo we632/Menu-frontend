@@ -1110,9 +1110,13 @@ function getBadgeMeta(product){
   }
 
   const stockStatus = String(product?.stock_status || "").toLowerCase();
-  const dailyRemainingRaw = Number(product?.daily_remaining);
-  const hasDailyRemaining = Number.isFinite(dailyRemainingRaw);
-  const dailyRemaining = hasDailyRemaining ? dailyRemainingRaw : Number.POSITIVE_INFINITY;
+  const rawDailyRemaining = product?.daily_remaining;
+  const parsedDailyRemaining = Number(rawDailyRemaining);
+  const hasDailyRemaining = rawDailyRemaining !== null
+    && rawDailyRemaining !== undefined
+    && rawDailyRemaining !== ""
+    && Number.isFinite(parsedDailyRemaining);
+  const dailyRemaining = hasDailyRemaining ? parsedDailyRemaining : Number.POSITIVE_INFINITY;
   const isSoldOutToday = hasDailyRemaining && dailyRemaining <= 0;
   const isOutByStatus = stockStatus === "out_of_stock" || stockStatus === "non_orderable" || stockStatus === "sold_out";
   const isOutByFlag = product?.orderable === false || product?.is_orderable === false;

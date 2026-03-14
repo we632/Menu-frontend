@@ -1437,7 +1437,8 @@ document.querySelector(".sell-summary").addEventListener("click",()=>{
 
 cartClose.addEventListener("click",()=> cartDrawer.classList.remove("open"));
 cartDrawer.addEventListener("click",(e)=>{
-  if(e.target === cartDrawer) cartDrawer.classList.remove("open");
+  // 仅允许通过关闭按钮退出，不响应遮罩点击
+  if (e.target === cartDrawer) return;
 });
 
 function getPromotionCandidates(){
@@ -1510,13 +1511,15 @@ function closePromotionModal(){
 promotionOpenBtnEl.addEventListener("click", openPromotionModal);
 promotionCloseBtn.addEventListener("click", closePromotionModal);
 promotionModal.addEventListener("click", (e)=>{
-  if (e.target === promotionModal) closePromotionModal();
+  // 仅允许通过关闭按钮退出，不响应遮罩点击
+  if (e.target === promotionModal) return;
 });
 
 payLaterOpenBtn?.addEventListener("click", openPayLaterModal);
 payLaterCloseBtn?.addEventListener("click", closePayLaterModal);
 payLaterModal?.addEventListener("click", (e)=>{
-  if (e.target === payLaterModal) closePayLaterModal();
+  // 仅允许通过关闭按钮退出，不响应遮罩点击
+  if (e.target === payLaterModal) return;
 });
 
 payLaterListEl?.addEventListener("click", async (e)=>{
@@ -1969,7 +1972,8 @@ function openActionModal({
 actionCloseBtn.addEventListener("click", ()=> closeActionModal(null));
 actionCancelBtn.addEventListener("click", ()=> closeActionModal(null));
 actionModal.addEventListener("click", (e)=>{
-  if (e.target === actionModal) closeActionModal(null);
+  // 仅允许通过明确操作按钮退出，不响应遮罩点击
+  if (e.target === actionModal) return;
 });
 
 actionPaymentTypeSelect.addEventListener("change", syncPayLaterCustomerField);

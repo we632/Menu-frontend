@@ -1052,6 +1052,12 @@ const API_KEY  = "4f93kKz8LmPq21XyN7uQaBcD"; // ✅ 你现在的 key（注意：
 const menuRoot = document.getElementById("menuRoot");
 const ALLOWED_PAYMENT_TYPES = ["Cash", "Apple Cash", "Zelle", "Pay Later"];
 
+function getEventTargetElement(target){
+  if (target instanceof Element) return target;
+  if (target && target.nodeType === Node.TEXT_NODE) return target.parentElement;
+  return null;
+}
+
 function normalizePaymentType(v){
   const raw = String(v || "").trim().toLowerCase();
   const matched = ALLOWED_PAYMENT_TYPES.find((item)=> item.toLowerCase() == raw);
@@ -1337,11 +1343,14 @@ function updateQtyControls(){
 
 /** 只允许点 + / - 改数量（点别的地方不交互） */
 document.addEventListener("click",(e)=>{
-  const plus = e.target.closest(".qty-btn.plus");
-  const minus = e.target.closest(".qty-btn.minus");
+  const target = getEventTargetElement(e.target);
+  if (!target) return;
+
+  const plus = target.closest(".qty-btn.plus");
+  const minus = target.closest(".qty-btn.minus");
   if (!plus && !minus) return;
 
-  const item = e.target.closest(".item[data-sku]");
+  const item = target.closest(".item[data-sku]");
   if (!item) return;
 
   e.preventDefault();
@@ -1370,7 +1379,10 @@ const cartTotalPriceEl = document.getElementById("cartTotalPrice");
 const cartDiscountPriceEl = document.getElementById("cartDiscountPrice");
 
 cartItemsEl?.addEventListener("click", (e)=>{
-  const stepBtn = e.target.closest(".cart-step-btn");
+  const target = getEventTargetElement(e.target);
+  if (!target) return;
+
+  const stepBtn = target.closest(".cart-step-btn");
   if (!stepBtn) return;
 
   const sku = decodeURIComponent(String(stepBtn.dataset.sku || "").trim());
@@ -1425,7 +1437,8 @@ document.querySelector(".sell-summary").addEventListener("click",()=>{
 
 cartClose.addEventListener("click",()=> cartDrawer.classList.remove("open"));
 cartDrawer.addEventListener("click",(e)=>{
-  if(e.target === cartDrawer) cartDrawer.classList.remove("open");
+  // Cart Preview 允许点击遮罩关闭
+  if (e.target === cartDrawer) cartDrawer.classList.remove("open");
 });
 
 function getPromotionCandidates(){
@@ -1498,17 +1511,22 @@ function closePromotionModal(){
 promotionOpenBtnEl.addEventListener("click", openPromotionModal);
 promotionCloseBtn.addEventListener("click", closePromotionModal);
 promotionModal.addEventListener("click", (e)=>{
-  if (e.target === promotionModal) closePromotionModal();
+  // 仅允许通过关闭按钮退出，不响应遮罩点击
+  if (e.target === promotionModal) return;
 });
 
 payLaterOpenBtn?.addEventListener("click", openPayLaterModal);
 payLaterCloseBtn?.addEventListener("click", closePayLaterModal);
 payLaterModal?.addEventListener("click", (e)=>{
-  if (e.target === payLaterModal) closePayLaterModal();
+  // 仅允许通过关闭按钮退出，不响应遮罩点击
+  if (e.target === payLaterModal) return;
 });
 
 payLaterListEl?.addEventListener("click", async (e)=>{
-  const actionBtn = e.target.closest("[data-paylater-action]");
+  const target = getEventTargetElement(e.target);
+  if (!target) return;
+
+  const actionBtn = target.closest("[data-paylater-action]");
   if (!actionBtn) return;
 
   const customerName = decodeURIComponent(String(actionBtn.getAttribute("data-customer-name") || "").trim());
@@ -1578,7 +1596,10 @@ promotionApplyBtn.addEventListener("click", ()=>{
 });
 
 promotionListEl.addEventListener("click", (e)=>{
-  const btn = e.target.closest("[data-remove-discount]");
+  const target = getEventTargetElement(e.target);
+  if (!target) return;
+
+  const btn = target.closest("[data-remove-discount]");
   if (!btn) return;
   const sku = decodeURIComponent(String(btn.getAttribute("data-remove-discount") || "").trim());
   if (!sku) return;
@@ -1758,17 +1779,18 @@ async function getJsonWithAuth(path){
   throw new Error(lastError);
 }
 
-async function loadPayLaterSummary(){
-  return getJsonWithAuth("api/pay-later/summary");
-}
-
 async function loadPayLaterOpenList(){
   return getJsonWithAuth("api/pay-later/open");
 }
 
-function renderPayLaterSummary(data){
-  const openCount = Number(data?.open_count || 0);
-  const openAmount = Number(data?.open_amount || 0);
+function renderPayLaterSummaryFromRows(rows){
+  const safeRows = Array.isArray(rows) ? rows : [];
+  const openCount = safeRows.length;
+  const openAmount = roundMoney(safeRows.reduce((sum, row)=>{
+    const remainingAmount = roundMoney(row?.remaining_amount);
+    return sum + (remainingAmount > 0 ? remainingAmount : 0);
+  }, 0));
+
   payLaterSummaryEl.innerHTML = `
     <div class="pay-later-summary">
       <span>Open items: ${openCount}</span>
@@ -1791,27 +1813,17 @@ function renderPayLaterList(rows){
         ? row.remaining_amount
         : row?.amount
     );
-    const originalAmount = roundMoney(
-      row?.original_amount !== undefined && row?.original_amount !== null
-        ? row.original_amount
-        : remainingAmount
-    );
-
-    if (!(remainingAmount > 0)) continue;
-
     if (!grouped.has(customerName)){
       grouped.set(customerName, {
         customerName,
         totalRemaining: 0,
-        totalOriginal: 0,
         count: 0,
         paymentType: String(row?.payment_type || "Pay Later")
       });
     }
 
     const g = grouped.get(customerName);
-    g.totalRemaining = roundMoney(g.totalRemaining + remainingAmount);
-    g.totalOriginal = roundMoney(g.totalOriginal + (originalAmount > 0 ? originalAmount : remainingAmount));
+    g.totalRemaining = roundMoney(g.totalRemaining + (remainingAmount > 0 ? remainingAmount : 0));
     g.count += 1;
   }
 
@@ -1838,9 +1850,10 @@ function renderPayLaterList(rows){
 }
 
 async function refreshPayLaterPanel(){
-  const [summary, rows] = await Promise.all([loadPayLaterSummary(), loadPayLaterOpenList()]);
-  renderPayLaterSummary(summary || {});
-  renderPayLaterList(Array.isArray(rows) ? rows : []);
+  const rows = await loadPayLaterOpenList();
+  const safeRows = Array.isArray(rows) ? rows : [];
+  renderPayLaterSummaryFromRows(safeRows);
+  renderPayLaterList(safeRows);
 }
 
 async function openPayLaterModal(){
@@ -1951,7 +1964,8 @@ function openActionModal({
 actionCloseBtn.addEventListener("click", ()=> closeActionModal(null));
 actionCancelBtn.addEventListener("click", ()=> closeActionModal(null));
 actionModal.addEventListener("click", (e)=>{
-  if (e.target === actionModal) closeActionModal(null);
+  // 仅允许通过明确操作按钮退出，不响应遮罩点击
+  if (e.target === actionModal) return;
 });
 
 actionPaymentTypeSelect.addEventListener("change", syncPayLaterCustomerField);

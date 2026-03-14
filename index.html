@@ -1050,6 +1050,13 @@ const API_BASE = (() => {
 })(); // 本地自动走 :8000；线上默认走 Render
 const API_KEY  = "4f93kKz8LmPq21XyN7uQaBcD"; // ✅ 你现在的 key（注意：GitHub Pages 会暴露它）
 const menuRoot = document.getElementById("menuRoot");
+const ALLOWED_PAYMENT_TYPES = ["Cash", "Apple Cash", "Zelle", "Pay Later"];
+
+function normalizePaymentType(v){
+  const raw = String(v || "").trim().toLowerCase();
+  const matched = ALLOWED_PAYMENT_TYPES.find((item)=> item.toLowerCase() == raw);
+  return matched || "";
+}
 
 // Excel 使用英文分类
 const CATEGORY_ORDER = [
@@ -1779,15 +1786,32 @@ function renderPayLaterList(rows){
   const grouped = new Map();
   for (const row of rows){
     const customerName = String(row?.customer_name || "Unknown").trim() || "Unknown";
-    const amount = roundMoney(row?.amount);
-    if (!(amount > 0)) continue;
+    const remainingAmount = roundMoney(
+      row?.remaining_amount !== undefined && row?.remaining_amount !== null
+        ? row.remaining_amount
+        : row?.amount
+    );
+    const originalAmount = roundMoney(
+      row?.original_amount !== undefined && row?.original_amount !== null
+        ? row.original_amount
+        : remainingAmount
+    );
+
+    if (!(remainingAmount > 0)) continue;
 
     if (!grouped.has(customerName)){
-      grouped.set(customerName, { customerName, totalAmount: 0, count: 0, paymentType: String(row?.payment_type || "Pay Later") });
+      grouped.set(customerName, {
+        customerName,
+        totalRemaining: 0,
+        totalOriginal: 0,
+        count: 0,
+        paymentType: String(row?.payment_type || "Pay Later")
+      });
     }
 
     const g = grouped.get(customerName);
-    g.totalAmount = roundMoney(g.totalAmount + amount);
+    g.totalRemaining = roundMoney(g.totalRemaining + remainingAmount);
+    g.totalOriginal = roundMoney(g.totalOriginal + (originalAmount > 0 ? originalAmount : remainingAmount));
     g.count += 1;
   }
 
@@ -1802,12 +1826,12 @@ function renderPayLaterList(rows){
     <div class="promo-item">
       <div class="promo-item-main">
         <div class="promo-item-name">${escapeHtml(group.customerName)}</div>
-        <div class="promo-item-meta">${fmtPrice(group.totalAmount)} · ${group.count} item(s) · ${escapeHtml(group.paymentType)}</div>
+        <div class="promo-item-meta">${fmtPrice(group.totalRemaining)} / ${fmtPrice(group.totalOriginal)} · ${group.count} item(s) · ${escapeHtml(group.paymentType)}</div>
       </div>
       <div class="pay-later-actions">
         <input class="pay-later-amount-input" type="number" min="0.01" step="0.01" placeholder="Amount">
-        <button class="pay-later-payoff" type="button" data-paylater-action="partial" data-customer-name="${encodeURIComponent(group.customerName)}" data-open-amount="${group.totalAmount}">Pay</button>
-        <button class="pay-later-payoff" type="button" data-paylater-action="all" data-customer-name="${encodeURIComponent(group.customerName)}" data-open-amount="${group.totalAmount}">Payoff</button>
+        <button class="pay-later-payoff" type="button" data-paylater-action="partial" data-customer-name="${encodeURIComponent(group.customerName)}" data-open-amount="${group.totalRemaining}">Pay</button>
+        <button class="pay-later-payoff" type="button" data-paylater-action="all" data-customer-name="${encodeURIComponent(group.customerName)}" data-open-amount="${group.totalRemaining}">Payoff</button>
       </div>
     </div>
   `).join("");
@@ -1936,8 +1960,14 @@ actionForm.addEventListener("submit", (e)=>{
   e.preventDefault();
   const note = String(actionNoteInput.value || "");
   const pin = String(actionPinInput.value || "").trim();
-  const paymentType = String(actionPaymentTypeSelect.value || "Cash").trim();
+  const paymentType = normalizePaymentType(actionPaymentTypeSelect.value || "Cash");
   const customerName = String(actionCustomerNameInput.value || "").trim();
+
+  if (!paymentType){
+    actionErrorEl.textContent = "Invalid payment type.";
+    actionPaymentTypeSelect.focus();
+    return;
+  }
 
   if (paymentType === "Pay Later" && !customerName){
     actionErrorEl.textContent = "Customer name is required for Pay Later.";
@@ -1993,7 +2023,7 @@ sellBtnEl.addEventListener("click", async ()=>{
       items,
       request_id: saleRequestId,
       note,
-      payment_type: paymentType || "Cash"
+      payment_type: paymentType
     };
 
     if ((paymentType || "") === "Pay Later"){

@@ -1779,17 +1779,18 @@ async function getJsonWithAuth(path){
   throw new Error(lastError);
 }
 
-async function loadPayLaterSummary(){
-  return getJsonWithAuth("api/pay-later/summary");
-}
-
 async function loadPayLaterOpenList(){
   return getJsonWithAuth("api/pay-later/open");
 }
 
-function renderPayLaterSummary(data){
-  const openCount = Number(data?.open_count || 0);
-  const openAmount = Number(data?.open_amount || 0);
+function renderPayLaterSummaryFromRows(rows){
+  const safeRows = Array.isArray(rows) ? rows : [];
+  const openCount = safeRows.length;
+  const openAmount = roundMoney(safeRows.reduce((sum, row)=>{
+    const remainingAmount = roundMoney(row?.remaining_amount);
+    return sum + (remainingAmount > 0 ? remainingAmount : 0);
+  }, 0));
+
   payLaterSummaryEl.innerHTML = `
     <div class="pay-later-summary">
       <span>Open items: ${openCount}</span>
@@ -1812,27 +1813,17 @@ function renderPayLaterList(rows){
         ? row.remaining_amount
         : row?.amount
     );
-    const originalAmount = roundMoney(
-      row?.original_amount !== undefined && row?.original_amount !== null
-        ? row.original_amount
-        : remainingAmount
-    );
-
-    if (!(remainingAmount > 0)) continue;
-
     if (!grouped.has(customerName)){
       grouped.set(customerName, {
         customerName,
         totalRemaining: 0,
-        totalOriginal: 0,
         count: 0,
         paymentType: String(row?.payment_type || "Pay Later")
       });
     }
 
     const g = grouped.get(customerName);
-    g.totalRemaining = roundMoney(g.totalRemaining + remainingAmount);
-    g.totalOriginal = roundMoney(g.totalOriginal + (originalAmount > 0 ? originalAmount : remainingAmount));
+    g.totalRemaining = roundMoney(g.totalRemaining + (remainingAmount > 0 ? remainingAmount : 0));
     g.count += 1;
   }
 
@@ -1859,9 +1850,10 @@ function renderPayLaterList(rows){
 }
 
 async function refreshPayLaterPanel(){
-  const [summary, rows] = await Promise.all([loadPayLaterSummary(), loadPayLaterOpenList()]);
-  renderPayLaterSummary(summary || {});
-  renderPayLaterList(Array.isArray(rows) ? rows : []);
+  const rows = await loadPayLaterOpenList();
+  const safeRows = Array.isArray(rows) ? rows : [];
+  renderPayLaterSummaryFromRows(safeRows);
+  renderPayLaterList(safeRows);
 }
 
 async function openPayLaterModal(){

@@ -333,26 +333,23 @@ body.preview-open{overflow:hidden}
 }
 
 @media (max-width:1024px) and (hover:none), (max-width:1024px) and (pointer:coarse){
-  :root{ --sellBarH: 146px; }
+  :root{ --sellBarH: 120px; }
 
   .sell-bar-inner{
     grid-template-columns: 1fr 1fr;
     grid-template-areas:
       "summary summary"
       "submit promo"
-      "savings savings"
       "clear clear";
   }
 
   .sell-summary{ grid-area:summary; }
   .sell-submit{ grid-area:submit; }
   .sell-promo{ grid-area:promo; }
-  .savings-launch{ grid-area:savings; }
   .sell-clear{ grid-area:clear; }
 
   .sell-submit,
   .sell-promo,
-  .savings-launch,
   .sell-clear{
     width:100%;
     justify-self:stretch;
@@ -361,7 +358,7 @@ body.preview-open{overflow:hidden}
 
 /* 小屏适配 */
 @media (max-width:640px) and (hover:none), (max-width:640px) and (pointer:coarse){
-  :root{ --sellBarH: 182px; }
+  :root{ --sellBarH: 150px; }
   .sell-bar{ padding-bottom:max(8px, env(safe-area-inset-bottom)); }
   .sell-bar-inner{
     gap:10px;
@@ -370,12 +367,10 @@ body.preview-open{overflow:hidden}
       "summary"
       "submit"
       "promo"
-      "savings"
       "clear";
   }
   .sell-submit,
   .sell-promo,
-  .savings-launch,
   .sell-clear{
     min-height:46px;
   }
@@ -600,6 +595,16 @@ body.preview-open{overflow:hidden}
   gap:10px;
 }
 
+.cart-savings-wrap{
+  margin-top:10px;
+}
+
+.cart-savings-wrap .savings-launch{
+  display:block;
+  width:100%;
+  text-align:center;
+}
+
 .cart-gift{
   flex: 1;
   padding: 12px 14px;
@@ -670,6 +675,16 @@ body.preview-open{overflow:hidden}
   font-size:22px;
   line-height:1;
 }
+#savingsClose{
+  border:none;
+  background:#fff;
+  width:32px;
+  height:32px;
+  border-radius:999px;
+  cursor:pointer;
+  font-size:22px;
+  line-height:1;
+}
 
 .pay-later-summary{
   display:flex;
@@ -713,9 +728,43 @@ body.preview-open{overflow:hidden}
 
 .promo-form{
   display:grid;
-  grid-template-columns: 1fr 130px auto;
+  grid-template-columns:minmax(0,1fr) minmax(0,130px) auto;
   gap:10px;
   align-items:end;
+}
+
+.promo-form .promo-field{
+  min-width:0;
+}
+
+.promo-form .promo-input{
+  width:100%;
+}
+
+.promo-form .promo-apply{
+  white-space:nowrap;
+}
+
+.savings-form{
+  grid-template-columns:repeat(3,minmax(0,1fr));
+}
+
+.savings-form .promo-field{
+  min-width:0;
+}
+
+.savings-form .promo-input{
+  width:100%;
+}
+
+.savings-form .promo-apply{
+  min-width:0;
+}
+
+@media (max-width:640px){
+  .savings-form{
+    grid-template-columns:1fr;
+  }
 }
 
 .promo-field{
@@ -731,6 +780,8 @@ body.preview-open{overflow:hidden}
 }
 
 .promo-input{
+  display:block;
+  width:100%;
   border:1px solid #e5e7eb;
   border-radius:10px;
   padding:10px 12px;
@@ -852,6 +903,32 @@ body.preview-open{overflow:hidden}
   display:flex;
   flex-direction:column;
   gap:10px;
+}
+
+.action-savings-card{
+  border:1px solid #f3e8d8;
+  background:#fffaf5;
+  border-radius:12px;
+  padding:10px;
+}
+
+.action-savings-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+}
+
+.action-savings-meta{
+  margin:6px 0 0;
+  color:#9a3412;
+  font-size:12px;
+  font-weight:700;
+}
+
+@media (max-width:640px){
+  .action-savings-grid{
+    grid-template-columns:1fr;
+  }
 }
 
 .action-textarea,
@@ -980,10 +1057,15 @@ body.preview-open{overflow:hidden}
       <div id="cartTotal"></div>
       <div id="cartTotalPrice"></div>
       <div id="cartDiscountPrice"></div>
+      <div id="cartSavingsDeduction"></div>
+      <div id="cartSavingsCustomer"></div>
 
       <div class="cart-actions">
         <button id="giftSubmit" class="cart-gift" type="button">Gift</button>
         <button id="payLaterOpen" class="cart-gift" type="button">Pay Later</button>
+      </div>
+      <div class="cart-savings-wrap">
+        <button id="savingsOpen" class="savings-launch" type="button">Savings</button>
       </div>
     </div>
   </div>
@@ -1003,9 +1085,6 @@ body.preview-open{overflow:hidden}
       Promotion
     </button>
 
-    <button id="savingsOpen" class="savings-launch" type="button">
-      Savings
-    </button>
 
     <button id="clearCart" class="sell-clear" type="button" disabled>
       Clear
@@ -1044,18 +1123,14 @@ body.preview-open{overflow:hidden}
     </div>
 
     <div class="promo-field" id="savingsAccountField">
-      <label class="promo-label" for="savingsAccountSelect">Savings Account</label>
+      <label class="promo-label" for="savingsAccountSelect">Savings Customer</label>
       <select id="savingsAccountSelect" class="promo-input"></select>
     </div>
     <div id="savingsAccountEmpty" class="savings-empty" style="display:none;">无可用储蓄账户</div>
 
-    <div class="promo-form" style="margin-top:12px;">
+    <div class="promo-form savings-form" style="margin-top:12px;">
       <div class="promo-field">
-        <label class="promo-label" for="savingsDepositAccountInput">Account ID</label>
-        <input id="savingsDepositAccountInput" class="promo-input" type="text" placeholder="CUST_001">
-      </div>
-      <div class="promo-field">
-        <label class="promo-label" for="savingsDepositCustomerInput">Customer Name (new account)</label>
+        <label class="promo-label" for="savingsDepositCustomerInput">Customer Name</label>
         <input id="savingsDepositCustomerInput" class="promo-input" type="text" placeholder="Tom">
       </div>
       <div class="promo-field">
@@ -1111,16 +1186,22 @@ body.preview-open{overflow:hidden}
       <label id="actionCustomerNameLabel" class="promo-label" for="actionCustomerNameInput" style="display:none;">Customer Name</label>
       <input id="actionCustomerNameInput" class="action-pin" type="text" style="display:none;" autocomplete="off" placeholder="Enter customer name">
 
-      <div id="actionSavingsSection" style="display:none;">
+      <div id="actionSavingsSection" class="action-savings-card" style="display:none;">
         <label class="savings-checkbox" for="actionUseSavingsInput">
-          <input id="actionUseSavingsInput" type="checkbox"> Use Savings
+          <input id="actionUseSavingsInput" type="checkbox"> Use Savings (backend will settle if deduction exceeds order total)
         </label>
         <div id="actionSavingsFields" style="display:none; margin-top:8px;">
-          <label class="promo-label" for="actionSavingsAccountSelect">Savings Account</label>
-          <select id="actionSavingsAccountSelect" class="promo-input"></select>
-
-          <label class="promo-label" for="actionSavingsDeductionInput">Savings Deduction Amount</label>
-          <input id="actionSavingsDeductionInput" class="promo-input" type="number" min="0" step="0.01" placeholder="0.00">
+          <div class="action-savings-grid">
+            <div class="promo-field">
+              <label class="promo-label" for="actionSavingsAccountSelect">Savings Customer</label>
+              <select id="actionSavingsAccountSelect" class="promo-input"></select>
+            </div>
+            <div class="promo-field">
+              <label class="promo-label" for="actionSavingsDeductionInput">Savings Deduction Amount</label>
+              <input id="actionSavingsDeductionInput" class="promo-input" type="number" min="0" step="0.01" placeholder="0.00">
+            </div>
+          </div>
+          <p id="actionSavingsMeta" class="action-savings-meta"></p>
           <p id="actionSavingsWarning" class="savings-warning"></p>
         </div>
       </div>
@@ -1161,8 +1242,9 @@ const checkoutState = {
   paymentType: "Cash",
   useSavings: false,
   savingsAccounts: [],
-  selectedSavingsAccountId: "",
+  selectedSavingsCustomerName: "",
   savingsDeductionAmount: 0,
+  cartPreview: null,
 };
 
 function getEventTargetElement(target){
@@ -1491,6 +1573,8 @@ const cartItemsEl = document.getElementById("cartItems");
 const cartTotalEl = document.getElementById("cartTotal");
 const cartTotalPriceEl = document.getElementById("cartTotalPrice");
 const cartDiscountPriceEl = document.getElementById("cartDiscountPrice");
+const cartSavingsDeductionEl = document.getElementById("cartSavingsDeduction");
+const cartSavingsCustomerEl = document.getElementById("cartSavingsCustomer");
 
 cartItemsEl?.addEventListener("click", (e)=>{
   const target = getEventTargetElement(e.target);
@@ -1521,7 +1605,6 @@ const savingsCloseBtn = document.getElementById("savingsClose");
 const savingsAccountField = document.getElementById("savingsAccountField");
 const savingsAccountSelect = document.getElementById("savingsAccountSelect");
 const savingsAccountEmpty = document.getElementById("savingsAccountEmpty");
-const savingsDepositAccountInput = document.getElementById("savingsDepositAccountInput");
 const savingsDepositCustomerInput = document.getElementById("savingsDepositCustomerInput");
 const savingsDepositAmountInput = document.getElementById("savingsDepositAmountInput");
 const savingsDepositNoteInput = document.getElementById("savingsDepositNoteInput");
@@ -1553,6 +1636,7 @@ const actionSavingsFields = document.getElementById("actionSavingsFields");
 const actionSavingsAccountSelect = document.getElementById("actionSavingsAccountSelect");
 const actionSavingsDeductionInput = document.getElementById("actionSavingsDeductionInput");
 const actionSavingsWarning = document.getElementById("actionSavingsWarning");
+const actionSavingsMeta = document.getElementById("actionSavingsMeta");
 const actionPinInput = document.getElementById("actionPinInput");
 const actionConfirmBtn = document.getElementById("actionConfirm");
 const actionErrorEl = document.getElementById("actionError");
@@ -1674,15 +1758,13 @@ savingsModal?.addEventListener("click", (e)=>{
 });
 
 savingsAccountSelect?.addEventListener("change", ()=>{
-  checkoutState.selectedSavingsAccountId = String(savingsAccountSelect.value || "");
-  savingsDepositAccountInput.value = checkoutState.selectedSavingsAccountId;
-  actionSavingsAccountSelect.value = checkoutState.selectedSavingsAccountId;
+  checkoutState.selectedSavingsCustomerName = String(savingsAccountSelect.value || "");
+  actionSavingsAccountSelect.value = checkoutState.selectedSavingsCustomerName;
   syncActionSavingsWarning();
 });
 
 savingsDepositSubmit?.addEventListener("click", async ()=>{
-  const accountId = String(savingsDepositAccountInput.value || checkoutState.selectedSavingsAccountId || "").trim();
-  const customerName = String(savingsDepositCustomerInput.value || "").trim();
+  const customerName = String(savingsDepositCustomerInput.value || checkoutState.selectedSavingsCustomerName || "").trim();
   const amount = roundMoney(savingsDepositAmountInput.value);
   const note = String(savingsDepositNoteInput.value || "").trim();
   const pin = String(savingsDepositPinInput.value || "").trim();
@@ -1702,9 +1784,9 @@ savingsDepositSubmit?.addEventListener("click", async ()=>{
     savingsDepositPinInput.focus();
     return;
   }
-  if (!accountId){
-    savingsDepositMessage.textContent = "Account ID is required.";
-    savingsDepositAccountInput.focus();
+  if (!customerName){
+    savingsDepositMessage.textContent = "Customer name is required.";
+    savingsDepositCustomerInput.focus();
     return;
   }
 
@@ -1712,7 +1794,6 @@ savingsDepositSubmit?.addEventListener("click", async ()=>{
   savingsDepositMessage.textContent = "Submitting deposit...";
   try{
     await postJson(apiUrl("api/savings/deposit"), {
-      account_id: accountId,
       customer_name: customerName,
       amount,
       request_id: requestId,
@@ -1945,17 +2026,25 @@ function renderCartPreview(){
   });
 
   cartTotalEl.textContent = `Total Items: ${totalQty}`;
-  cartTotalPriceEl.textContent = `Total Price: ${fmtPrice(totalPrice)}`;
   const discountAmountTotal = getDiscountAmountTotal();
+  const netTotalPrice = roundMoney(Math.max(0, totalPrice - discountAmountTotal));
+  cartTotalPriceEl.textContent = `Total Price: ${fmtPrice(netTotalPrice)}`;
   cartDiscountPriceEl.textContent = discountAmountTotal > 0
     ? `Discount: -${fmtPrice(discountAmountTotal)}`
     : "";
+
+  const preview = checkoutState.cartPreview || {};
+  const previewSavings = roundMoney(preview?.savings_deduction_amount);
+  const previewCustomer = String(preview?.savings_customer_name || "").trim();
+  cartSavingsDeductionEl.textContent = previewSavings > 0 ? `Savings Deduction: ${fmtPrice(previewSavings)}` : "";
+  cartSavingsCustomerEl.textContent = previewCustomer ? `Savings Customer: ${previewCustomer}` : "";
 }
 
 /** Clear */
 clearBtnEl.addEventListener("click",()=>{
   for(const k of Object.keys(cart)) delete cart[k];
   discountAmountBySku.clear();
+  checkoutState.cartPreview = null;
   closePromotionModal();
   updateUI();
   if (cartDrawer.classList.contains("open")) renderCartPreview();
@@ -2017,31 +2106,33 @@ async function loadSavingsAccounts(){
   const rows = await getJsonWithAuth("api/savings/accounts?available_only=true");
   const accounts = Array.isArray(rows) ? rows : [];
   checkoutState.savingsAccounts = accounts.map((row)=>({
-    account_id: String(row?.account_id || "").trim(),
     customer_name: String(row?.customer_name || "").trim(),
     balance: roundMoney(row?.balance),
-  })).filter((row)=> row.account_id);
+    active: Boolean(row?.active),
+    updated_at: String(row?.updated_at || ""),
+    note: String(row?.note || ""),
+  })).filter((row)=> row.customer_name);
 
-  if (!checkoutState.savingsAccounts.some((row)=> row.account_id === checkoutState.selectedSavingsAccountId)){
-    checkoutState.selectedSavingsAccountId = checkoutState.savingsAccounts[0]?.account_id || "";
+  if (!checkoutState.savingsAccounts.some((row)=> row.customer_name === checkoutState.selectedSavingsCustomerName)){
+    checkoutState.selectedSavingsCustomerName = checkoutState.savingsAccounts[0]?.customer_name || "";
   }
 
   return checkoutState.savingsAccounts;
 }
 
-function renderSavingsAccountOptions(selectEl, accounts, selectedId = ""){
+function renderSavingsAccountOptions(selectEl, accounts, selectedCustomerName = ""){
   if (!selectEl) return;
   selectEl.innerHTML = "";
   for (const row of accounts){
     const option = document.createElement("option");
-    option.value = row.account_id;
-    option.textContent = `${row.account_id} · ${row.customer_name || "Unknown"} · ${fmtPrice(row.balance)}`;
+    option.value = row.customer_name;
+    option.textContent = `${row.customer_name || "Unknown"} · ${fmtPrice(row.balance)}`;
     selectEl.appendChild(option);
   }
-  if (accounts.some((row)=> row.account_id === selectedId)){
-    selectEl.value = selectedId;
+  if (accounts.some((row)=> row.customer_name === selectedCustomerName)){
+    selectEl.value = selectedCustomerName;
   }else if (accounts.length){
-    selectEl.value = accounts[0].account_id;
+    selectEl.value = accounts[0].customer_name;
   }
 }
 
@@ -2052,15 +2143,35 @@ function getCheckoutOrderTotal(){
   return roundMoney(subtotal - getDiscountAmountTotal());
 }
 
+function getSelectedSavingsAccount(){
+  return checkoutState.savingsAccounts.find((row)=> row.customer_name === actionSavingsAccountSelect.value) || null;
+}
+
+function syncActionSavingsAutoDeduction(){
+  if (!actionUseSavingsInput.checked) return;
+  const selected = getSelectedSavingsAccount();
+  const orderTotal = getCheckoutOrderTotal();
+  const deduction = roundMoney(Math.max(0, Math.min(orderTotal, selected?.balance || 0)));
+  actionSavingsDeductionInput.value = deduction.toFixed(2);
+  checkoutState.savingsDeductionAmount = deduction;
+  const remainingCash = roundMoney(Math.max(0, orderTotal - deduction));
+  actionSavingsMeta.textContent = `Order ${fmtPrice(orderTotal)} · Savings ${fmtPrice(deduction)} · Remaining Cash ${fmtPrice(remainingCash)}`;
+}
+
 function syncActionSavingsWarning(){
   if (!actionUseSavingsInput.checked){
     actionSavingsWarning.textContent = "";
+    actionSavingsMeta.textContent = "";
     return;
   }
   const deduction = roundMoney(actionSavingsDeductionInput.value);
-  const selected = checkoutState.savingsAccounts.find((row)=> row.account_id === actionSavingsAccountSelect.value);
+  const selected = getSelectedSavingsAccount();
+  const orderTotal = getCheckoutOrderTotal();
+
   if (selected && deduction > selected.balance){
     actionSavingsWarning.textContent = `Warning: deduction exceeds account balance (${fmtPrice(selected.balance)}).`;
+  }else if (deduction > orderTotal){
+    actionSavingsWarning.textContent = `Info: deduction is above order total; backend will settle remaining amount.`;
   }else{
     actionSavingsWarning.textContent = "";
   }
@@ -2080,12 +2191,14 @@ function syncActionSavingsUI(){
     checkoutState.useSavings = false;
     checkoutState.savingsDeductionAmount = 0;
     actionSavingsWarning.textContent = "";
+    actionSavingsMeta.textContent = "";
     return;
   }
 
-  renderSavingsAccountOptions(actionSavingsAccountSelect, checkoutState.savingsAccounts, checkoutState.selectedSavingsAccountId);
-  checkoutState.selectedSavingsAccountId = String(actionSavingsAccountSelect.value || "");
+  renderSavingsAccountOptions(actionSavingsAccountSelect, checkoutState.savingsAccounts, checkoutState.selectedSavingsCustomerName);
+  checkoutState.selectedSavingsCustomerName = String(actionSavingsAccountSelect.value || "");
   actionSavingsFields.style.display = actionUseSavingsInput.checked ? "" : "none";
+  if (actionUseSavingsInput.checked) syncActionSavingsAutoDeduction();
   syncActionSavingsWarning();
 }
 
@@ -2093,10 +2206,7 @@ function renderSavingsModalAccounts(){
   const hasAccounts = checkoutState.savingsAccounts.length > 0;
   savingsAccountField.style.display = hasAccounts ? "" : "none";
   savingsAccountEmpty.style.display = hasAccounts ? "none" : "";
-  renderSavingsAccountOptions(savingsAccountSelect, checkoutState.savingsAccounts, checkoutState.selectedSavingsAccountId);
-  if (!String(savingsDepositAccountInput.value || "").trim()){
-    savingsDepositAccountInput.value = checkoutState.selectedSavingsAccountId || "";
-  }
+  renderSavingsAccountOptions(savingsAccountSelect, checkoutState.savingsAccounts, checkoutState.selectedSavingsCustomerName);
 }
 
 function renderPayLaterSummaryFromRows(rows){
@@ -2274,6 +2384,7 @@ function openActionModal({
     checkoutState.savingsDeductionAmount = 0;
     actionUseSavingsInput.checked = false;
     actionSavingsDeductionInput.value = "0";
+    actionSavingsMeta.textContent = "";
     actionCustomerNameInput.value = "";
     syncPayLaterCustomerField();
     actionPinInput.value = "";
@@ -2300,17 +2411,27 @@ actionUseSavingsInput?.addEventListener("change", ()=>{
   if (!checkoutState.useSavings){
     actionSavingsDeductionInput.value = "0";
     checkoutState.savingsDeductionAmount = 0;
+    actionSavingsMeta.textContent = "";
+  }else{
+    syncActionSavingsAutoDeduction();
   }
   syncActionSavingsWarning();
 });
 
 actionSavingsAccountSelect?.addEventListener("change", ()=>{
-  checkoutState.selectedSavingsAccountId = String(actionSavingsAccountSelect.value || "");
+  checkoutState.selectedSavingsCustomerName = String(actionSavingsAccountSelect.value || "");
+  if (actionUseSavingsInput.checked) syncActionSavingsAutoDeduction();
   syncActionSavingsWarning();
 });
 
 actionSavingsDeductionInput?.addEventListener("input", ()=>{
   checkoutState.savingsDeductionAmount = roundMoney(actionSavingsDeductionInput.value);
+  if (actionUseSavingsInput.checked){
+    const orderTotal = getCheckoutOrderTotal();
+    const entered = roundMoney(actionSavingsDeductionInput.value);
+    const remainingCash = roundMoney(Math.max(0, orderTotal - entered));
+    actionSavingsMeta.textContent = `Order ${fmtPrice(orderTotal)} · Savings ${fmtPrice(entered)} · Remaining Cash ${fmtPrice(remainingCash)}`;
+  }
   syncActionSavingsWarning();
 });
 
@@ -2321,9 +2442,9 @@ actionForm.addEventListener("submit", (e)=>{
   const paymentType = normalizePaymentType(actionPaymentTypeSelect.value || "Cash");
   const customerName = String(actionCustomerNameInput.value || "").trim();
   const useSavings = Boolean(actionUseSavingsInput.checked);
-  const savingsAccountId = String(actionSavingsAccountSelect.value || "").trim();
+  const savingsCustomerName = String(actionSavingsAccountSelect.value || "").trim();
+  const selectedSavings = getSelectedSavingsAccount();
   const savingsDeductionAmount = roundMoney(actionSavingsDeductionInput.value);
-  const orderTotal = getCheckoutOrderTotal();
 
   if (!paymentType){
     actionErrorEl.textContent = "Invalid payment type.";
@@ -2343,8 +2464,8 @@ actionForm.addEventListener("submit", (e)=>{
     return;
   }
 
-  if (useSavings && !savingsAccountId){
-    actionErrorEl.textContent = "Please select a savings account.";
+  if (useSavings && !savingsCustomerName){
+    actionErrorEl.textContent = "Please select a savings customer.";
     actionSavingsAccountSelect.focus();
     return;
   }
@@ -2355,8 +2476,8 @@ actionForm.addEventListener("submit", (e)=>{
     return;
   }
 
-  if (useSavings && savingsDeductionAmount > orderTotal){
-    actionErrorEl.textContent = "Savings deduction cannot exceed order total.";
+  if (useSavings && selectedSavings && savingsDeductionAmount > selectedSavings.balance){
+    actionErrorEl.textContent = `Savings deduction cannot exceed account balance (${fmtPrice(selectedSavings.balance)}).`;
     actionSavingsDeductionInput.focus();
     return;
   }
@@ -2367,7 +2488,7 @@ actionForm.addEventListener("submit", (e)=>{
     return;
   }
 
-  closeActionModal({ note, pin, paymentType, customerName, useSavings, savingsAccountId, savingsDeductionAmount });
+  closeActionModal({ note, pin, paymentType, customerName, useSavings, savingsCustomerName, savingsDeductionAmount });
 });
 
 sellBtnEl.addEventListener("click", async ()=>{
@@ -2389,7 +2510,7 @@ sellBtnEl.addEventListener("click", async ()=>{
   });
   if (!saleConfirm) return;
 
-  const { note, pin, paymentType, customerName, useSavings, savingsAccountId, savingsDeductionAmount } = saleConfirm;
+  const { note, pin, paymentType, customerName, useSavings, savingsCustomerName, savingsDeductionAmount } = saleConfirm;
 
   const items = skus.map(sku => ({ sku, qty: cart[sku] }));
   const discountItems = skus
@@ -2423,7 +2544,7 @@ sellBtnEl.addEventListener("click", async ()=>{
     }
 
     if (useSavings){
-      payload.savings_account_id = savingsAccountId;
+      payload.savings_customer_name = savingsCustomerName;
       payload.savings_deduction_amount = savingsDeductionAmount;
     }
 
@@ -2453,9 +2574,18 @@ sellBtnEl.addEventListener("click", async ()=>{
     updateUI();
     if (cartDrawer.classList.contains("open")) cartDrawer.classList.remove("open");
 
-    const resultTotal = roundMoney(saleResult?.total_amount);
-    const resultSavings = roundMoney(saleResult?.savings_deduction_amount);
-    const resultCash = roundMoney(saleResult?.cash_amount);
+    checkoutState.cartPreview = saleResult?.cart_preview && typeof saleResult.cart_preview === "object"
+      ? saleResult.cart_preview
+      : {
+          total_amount: saleResult?.total_amount,
+          savings_deduction_amount: saleResult?.savings_deduction_amount,
+          cash_amount: saleResult?.cash_amount,
+          savings_customer_name: saleResult?.savings_customer_name,
+        };
+
+    const resultTotal = roundMoney(checkoutState.cartPreview?.total_amount);
+    const resultSavings = roundMoney(checkoutState.cartPreview?.savings_deduction_amount);
+    const resultCash = roundMoney(checkoutState.cartPreview?.cash_amount);
     const splitSummary = `Total ${fmtPrice(resultTotal)} · Savings ${fmtPrice(resultSavings)} · Cash ${fmtPrice(resultCash)}`;
 
     if (discountError){

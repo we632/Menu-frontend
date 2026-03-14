@@ -670,6 +670,16 @@ body.preview-open{overflow:hidden}
   font-size:22px;
   line-height:1;
 }
+#savingsClose{
+  border:none;
+  background:#fff;
+  width:32px;
+  height:32px;
+  border-radius:999px;
+  cursor:pointer;
+  font-size:22px;
+  line-height:1;
+}
 
 .pay-later-summary{
   display:flex;
@@ -716,6 +726,28 @@ body.preview-open{overflow:hidden}
   grid-template-columns: 1fr 130px auto;
   gap:10px;
   align-items:end;
+}
+
+.savings-form{
+  grid-template-columns:repeat(3,minmax(0,1fr));
+}
+
+.savings-form .promo-field{
+  min-width:0;
+}
+
+.savings-form .promo-input{
+  width:100%;
+}
+
+.savings-form .promo-apply{
+  min-width:0;
+}
+
+@media (max-width:640px){
+  .savings-form{
+    grid-template-columns:1fr;
+  }
 }
 
 .promo-field{
@@ -1052,7 +1084,7 @@ body.preview-open{overflow:hidden}
     </div>
     <div id="savingsAccountEmpty" class="savings-empty" style="display:none;">无可用储蓄账户</div>
 
-    <div class="promo-form" style="margin-top:12px;">
+    <div class="promo-form savings-form" style="margin-top:12px;">
       <div class="promo-field">
         <label class="promo-label" for="savingsDepositCustomerInput">Customer Name</label>
         <input id="savingsDepositCustomerInput" class="promo-input" type="text" placeholder="Tom">

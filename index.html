@@ -691,6 +691,21 @@ body.preview-open{overflow:hidden}
   cursor:not-allowed;
 }
 
+
+.pay-later-actions{
+  display:flex;
+  gap:8px;
+  align-items:center;
+}
+
+.pay-later-amount-input{
+  width:98px;
+  border:1px solid #e5e7eb;
+  border-radius:999px;
+  padding:6px 10px;
+  font-size:12px;
+}
+
 .promo-form{
   display:grid;
   grid-template-columns: 1fr 130px auto;
@@ -1486,20 +1501,40 @@ payLaterModal?.addEventListener("click", (e)=>{
 });
 
 payLaterListEl?.addEventListener("click", async (e)=>{
-  const payoffBtn = e.target.closest("[data-payoff-sale-request-id]");
-  if (!payoffBtn) return;
+  const actionBtn = e.target.closest("[data-paylater-action]");
+  if (!actionBtn) return;
 
-  const saleRequestId = decodeURIComponent(String(payoffBtn.getAttribute("data-payoff-sale-request-id") || "").trim());
-  if (!saleRequestId) return;
+  const customerName = decodeURIComponent(String(actionBtn.getAttribute("data-customer-name") || "").trim());
+  if (!customerName) return;
 
-  payoffBtn.disabled = true;
+  const action = String(actionBtn.getAttribute("data-paylater-action") || "").trim();
+  const card = actionBtn.closest(".promo-item");
+  const amountInput = card?.querySelector(".pay-later-amount-input");
+  const openAmount = Number(actionBtn.getAttribute("data-open-amount") || 0);
+
+  let amount = 0;
+  if (action === "all") amount = openAmount;
+  else amount = Number(amountInput?.value || 0);
+
+  if (!(amount > 0)){
+    setSummaryOverride("Enter valid payment amount", 2000);
+    return;
+  }
+
+  actionBtn.disabled = true;
   try{
-    await payoffPayLaterItem(saleRequestId);
-    setSummaryOverride("Pay later paid off ✓", 2200);
+    const result = await payCustomerPartial(customerName, amount);
+    if (result?.already_paid){
+      setSummaryOverride("Already paid", 1800);
+    }else if (action === "all"){
+      setSummaryOverride("Payoff completed ✓", 2200);
+    }else{
+      setSummaryOverride("Partial payment recorded ✓", 2200);
+    }
   }catch(err){
-    setSummaryOverride(err?.message || "Payoff failed", 2600);
+    setSummaryOverride(err?.message || "Payment failed", 2600);
   }finally{
-    payoffBtn.disabled = false;
+    actionBtn.disabled = false;
   }
 });
 
@@ -1741,14 +1776,39 @@ function renderPayLaterList(rows){
     return;
   }
 
-  payLaterListEl.innerHTML = rows.map((row)=>`
+  const grouped = new Map();
+  for (const row of rows){
+    const customerName = String(row?.customer_name || "Unknown").trim() || "Unknown";
+    const amount = roundMoney(row?.amount);
+    if (!(amount > 0)) continue;
+
+    if (!grouped.has(customerName)){
+      grouped.set(customerName, { customerName, totalAmount: 0, count: 0, paymentType: String(row?.payment_type || "Pay Later") });
+    }
+
+    const g = grouped.get(customerName);
+    g.totalAmount = roundMoney(g.totalAmount + amount);
+    g.count += 1;
+  }
+
+  const groups = Array.from(grouped.values()).sort((a,b)=> a.customerName.localeCompare(b.customerName));
+
+  if (!groups.length){
+    payLaterListEl.innerHTML = `<div class="promo-empty">No open pay later items.</div>`;
+    return;
+  }
+
+  payLaterListEl.innerHTML = groups.map((group)=>`
     <div class="promo-item">
       <div class="promo-item-main">
-        <div class="promo-item-name">${escapeHtml(row.customer_name || "Unknown")}</div>
-        <div class="promo-item-meta">${fmtPrice(row.amount)} · ${escapeHtml(row.payment_type || "Pay Later")} · ${escapeHtml(row.note || "")}</div>
-        <div class="promo-item-meta">${escapeHtml(row.created_at || "")}</div>
+        <div class="promo-item-name">${escapeHtml(group.customerName)}</div>
+        <div class="promo-item-meta">${fmtPrice(group.totalAmount)} · ${group.count} item(s) · ${escapeHtml(group.paymentType)}</div>
       </div>
-      <button class="pay-later-payoff" type="button" data-payoff-sale-request-id="${encodeURIComponent(String(row.sale_request_id || row.id || ""))}">Payoff</button>
+      <div class="pay-later-actions">
+        <input class="pay-later-amount-input" type="number" min="0.01" step="0.01" placeholder="Amount">
+        <button class="pay-later-payoff" type="button" data-paylater-action="partial" data-customer-name="${encodeURIComponent(group.customerName)}" data-open-amount="${group.totalAmount}">Pay</button>
+        <button class="pay-later-payoff" type="button" data-paylater-action="all" data-customer-name="${encodeURIComponent(group.customerName)}" data-open-amount="${group.totalAmount}">Payoff</button>
+      </div>
     </div>
   `).join("");
 }
@@ -1778,26 +1838,30 @@ function closePayLaterModal(){
   payLaterModal.setAttribute("aria-hidden", "true");
 }
 
-async function payoffPayLaterItem(saleRequestId){
+async function payCustomerPartial(customerName, amount){
   const confirm = await openActionModal({
-    title: "Confirm Payoff",
-    confirmText: "Payoff",
+    title: amount > 0 ? `Confirm Payment ${fmtPrice(amount)}` : "Confirm Payment",
+    confirmText: "Confirm",
     showNote: true,
     showPaymentType: false,
-    hintText: "Add payoff note (optional) and enter PIN."
+    hintText: "Add payment note (optional) and enter PIN."
   });
-  if (!confirm) return;
+  if (!confirm) return null;
 
   const { note, pin } = confirm;
-  await postJson(apiUrl(`api/pay-later/${encodeURIComponent(saleRequestId)}/payoff`), {
+  const payload = {
     request_id: crypto.randomUUID(),
+    amount: roundMoney(amount),
     note,
     paid_by: "frontend"
-  }, {
+  };
+
+  const result = await postJson(apiUrl(`api/pay-later/customers/${encodeURIComponent(customerName)}/pay`), payload, {
     "X-Sell-Pin": pin
   });
 
   await refreshPayLaterPanel();
+  return result;
 }
 
 

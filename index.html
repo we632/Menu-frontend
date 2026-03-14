@@ -1826,7 +1826,7 @@ function renderPayLaterList(rows){
     <div class="promo-item">
       <div class="promo-item-main">
         <div class="promo-item-name">${escapeHtml(group.customerName)}</div>
-        <div class="promo-item-meta">${fmtPrice(group.totalRemaining)} / ${fmtPrice(group.totalOriginal)} · ${group.count} item(s) · ${escapeHtml(group.paymentType)}</div>
+        <div class="promo-item-meta">${fmtPrice(group.totalRemaining)}</div>
       </div>
       <div class="pay-later-actions">
         <input class="pay-later-amount-input" type="number" min="0.01" step="0.01" placeholder="Amount">

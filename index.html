@@ -945,6 +945,14 @@ body.preview-open{overflow:hidden}
       <label class="promo-label" for="actionNoteInput">Note (optional)</label>
       <textarea id="actionNoteInput" class="action-textarea" placeholder="Add note..."></textarea>
 
+      <label id="actionPaymentTypeLabel" class="promo-label" for="actionPaymentTypeSelect" style="display:none;">Payment Type</label>
+      <select id="actionPaymentTypeSelect" class="promo-input" style="display:none;">
+        <option value="Cash">Cash</option>
+        <option value="Apple Cash">Apple Cash</option>
+        <option value="Zelle">Zelle</option>
+        <option value="Pay Later">Pay Later</option>
+      </select>
+
       <label class="promo-label" for="actionPinInput">PIN</label>
       <input id="actionPinInput" class="action-pin" type="password" inputmode="numeric" autocomplete="off" placeholder="Enter PIN">
 
@@ -1110,13 +1118,9 @@ function getBadgeMeta(product){
   }
 
   const stockStatus = String(product?.stock_status || "").toLowerCase();
-  const rawDailyRemaining = product?.daily_remaining;
-  const parsedDailyRemaining = Number(rawDailyRemaining);
-  const hasDailyRemaining = rawDailyRemaining !== null
-    && rawDailyRemaining !== undefined
-    && rawDailyRemaining !== ""
-    && Number.isFinite(parsedDailyRemaining);
-  const dailyRemaining = hasDailyRemaining ? parsedDailyRemaining : Number.POSITIVE_INFINITY;
+  const dailyRemainingRaw = Number(product?.daily_remaining);
+  const hasDailyRemaining = Number.isFinite(dailyRemainingRaw);
+  const dailyRemaining = hasDailyRemaining ? dailyRemainingRaw : Number.POSITIVE_INFINITY;
   const isSoldOutToday = hasDailyRemaining && dailyRemaining <= 0;
   const isOutByStatus = stockStatus === "out_of_stock" || stockStatus === "non_orderable" || stockStatus === "sold_out";
   const isOutByFlag = product?.orderable === false || product?.is_orderable === false;
@@ -1313,6 +1317,8 @@ const actionForm = document.getElementById("actionForm");
 const actionHintEl = actionModal.querySelector(".action-hint");
 const actionNoteLabel = actionForm.querySelector(`label[for="actionNoteInput"]`);
 const actionNoteInput = document.getElementById("actionNoteInput");
+const actionPaymentTypeLabel = document.getElementById("actionPaymentTypeLabel");
+const actionPaymentTypeSelect = document.getElementById("actionPaymentTypeSelect");
 const actionPinInput = document.getElementById("actionPinInput");
 const actionConfirmBtn = document.getElementById("actionConfirm");
 const actionErrorEl = document.getElementById("actionError");
@@ -1597,58 +1603,6 @@ async function postJson(url, body, extraHeaders = {}){
   return data;
 }
 
-function getProductDisplayName(sku){
-  const normalizedSku = String(sku || "").trim();
-  const meta = productMetaBySku.get(normalizedSku);
-  return String(meta?.name || normalizedSku);
-}
-
-function formatDailyLimitError(detail){
-  if (!detail || typeof detail !== "object") return "";
-
-  const soldOutSkus = Array.isArray(detail.sold_out_skus) ? detail.sold_out_skus : [];
-  const remainingBySku = detail.remaining && typeof detail.remaining === "object"
-    ? detail.remaining
-    : {};
-
-  if (!soldOutSkus.length) return "";
-
-  const itemMessages = soldOutSkus.map((sku)=>{
-    const name = getProductDisplayName(sku);
-    const remainingRaw = Number(remainingBySku[sku]);
-    const hasRemaining = Number.isFinite(remainingRaw);
-    if (hasRemaining && remainingRaw > 0){
-      return `${name} today only has ${remainingRaw} left`;
-    }
-    return `${name} is sold out today`;
-  });
-
-  return `Selected quantity exceeds today's daily limit: ${itemMessages.join("; ")}`;
-}
-
-function formatApiErrorMessage(data, fallback = "Request failed"){
-  const detail = data?.detail;
-
-  if (typeof detail === "string" && detail.trim()){
-    return detail.trim();
-  }
-
-  if (detail && typeof detail === "object"){
-    const dailyLimitMessage = formatDailyLimitError(detail);
-    if (dailyLimitMessage) return dailyLimitMessage;
-
-    if (typeof detail.detail === "string" && detail.detail.trim()){
-      return detail.detail.trim();
-    }
-  }
-
-  if (typeof data?.message === "string" && data.message.trim()){
-    return data.message.trim();
-  }
-
-  return fallback;
-}
-
 
 async function refreshProductsForStockState(){
   try{
@@ -1671,7 +1625,14 @@ function closeActionModal(result = null){
   if (resolver) resolver(result);
 }
 
-function openActionModal({ title, confirmText, showNote = true, hintText = "Please add optional note and enter PIN to continue." }){
+function openActionModal({
+  title,
+  confirmText,
+  showNote = true,
+  showPaymentType = false,
+  hintText = "Please add optional note and enter PIN to continue.",
+  defaultPaymentType = "Cash"
+}){
   return new Promise((resolve)=>{
     actionModalResolver = resolve;
     actionTitleEl.textContent = title;
@@ -1680,6 +1641,9 @@ function openActionModal({ title, confirmText, showNote = true, hintText = "Plea
     actionNoteLabel.style.display = showNote ? "" : "none";
     actionNoteInput.style.display = showNote ? "" : "none";
     actionNoteInput.value = "";
+    actionPaymentTypeLabel.style.display = showPaymentType ? "" : "none";
+    actionPaymentTypeSelect.style.display = showPaymentType ? "" : "none";
+    actionPaymentTypeSelect.value = defaultPaymentType;
     actionPinInput.value = "";
     actionErrorEl.textContent = "";
     actionModal.classList.add("open");
@@ -1699,6 +1663,7 @@ actionForm.addEventListener("submit", (e)=>{
   e.preventDefault();
   const note = String(actionNoteInput.value || "");
   const pin = String(actionPinInput.value || "").trim();
+  const paymentType = String(actionPaymentTypeSelect.value || "Cash").trim();
 
   if (!pin){
     actionErrorEl.textContent = "PIN is required.";
@@ -1706,7 +1671,7 @@ actionForm.addEventListener("submit", (e)=>{
     return;
   }
 
-  closeActionModal({ note, pin });
+  closeActionModal({ note, pin, paymentType });
 });
 
 sellBtnEl.addEventListener("click", async ()=>{
@@ -1716,11 +1681,13 @@ sellBtnEl.addEventListener("click", async ()=>{
   const saleConfirm = await openActionModal({
     title: "Confirm Sale",
     confirmText: "Sell Now",
-    showNote: true
+    showNote: true,
+    showPaymentType: true,
+    defaultPaymentType: "Cash"
   });
   if (!saleConfirm) return;
 
-  const { note, pin } = saleConfirm;
+  const { note, pin, paymentType } = saleConfirm;
 
   const items = skus.map(sku => ({ sku, qty: cart[sku] }));
   const discountItems = skus
@@ -1744,7 +1711,8 @@ sellBtnEl.addEventListener("click", async ()=>{
     await postJson(apiUrl("api/sales/batch"), {
       items,
       request_id: crypto.randomUUID(),
-      note
+      note,
+      payment_type: paymentType || "Cash"
     }, {
       "X-Sell-Pin": pin
     });

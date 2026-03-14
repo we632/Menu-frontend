@@ -655,6 +655,41 @@ body.preview-open{overflow:hidden}
   font-size:22px;
   line-height:1;
 }
+#payLaterClose{
+  border:none;
+  background:#fff;
+  width:32px;
+  height:32px;
+  border-radius:999px;
+  cursor:pointer;
+  font-size:22px;
+  line-height:1;
+}
+
+.pay-later-summary{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:10px;
+  padding:8px 0 2px;
+  color:#374151;
+  font-weight:800;
+}
+
+.pay-later-payoff{
+  border:1px solid #e5e7eb;
+  background:#fff;
+  color:#374151;
+  border-radius:999px;
+  padding:6px 10px;
+  cursor:pointer;
+  font-weight:800;
+}
+
+.pay-later-payoff:disabled{
+  opacity:.55;
+  cursor:not-allowed;
+}
 
 .promo-form{
   display:grid;
@@ -886,6 +921,7 @@ body.preview-open{overflow:hidden}
 
       <div class="cart-actions">
         <button id="giftSubmit" class="cart-gift" type="button">Gift</button>
+        <button id="payLaterOpen" class="cart-gift" type="button">Pay Later</button>
       </div>
     </div>
   </div>
@@ -934,6 +970,18 @@ body.preview-open{overflow:hidden}
   </div>
 </div>
 
+<div id="payLaterModal" class="promo-modal" aria-hidden="true">
+  <div class="promo-panel" role="dialog" aria-modal="true" aria-label="Pay Later">
+    <div class="promo-header">
+      <div class="promo-title">Pay Later</div>
+      <button id="payLaterClose" type="button" aria-label="Close pay later">×</button>
+    </div>
+
+    <div id="payLaterSummary" class="promo-empty">Loading summary...</div>
+    <div id="payLaterList" class="promo-list"></div>
+  </div>
+</div>
+
 <div id="actionModal" class="action-modal" aria-hidden="true">
   <div class="action-panel" role="dialog" aria-modal="true" aria-label="Sale confirmation">
     <div class="action-header">
@@ -952,6 +1000,9 @@ body.preview-open{overflow:hidden}
         <option value="Zelle">Zelle</option>
         <option value="Pay Later">Pay Later</option>
       </select>
+
+      <label id="actionCustomerNameLabel" class="promo-label" for="actionCustomerNameInput" style="display:none;">Customer Name</label>
+      <input id="actionCustomerNameInput" class="action-pin" type="text" style="display:none;" autocomplete="off" placeholder="Enter customer name">
 
       <label class="promo-label" for="actionPinInput">PIN</label>
       <input id="actionPinInput" class="action-pin" type="password" inputmode="numeric" autocomplete="off" placeholder="Enter PIN">
@@ -1317,6 +1368,12 @@ const promotionSkuSelect = document.getElementById("promotionSkuSelect");
 const promotionAmountInput = document.getElementById("promotionAmountInput");
 const promotionListEl = document.getElementById("promotionList");
 
+const payLaterModal = document.getElementById("payLaterModal");
+const payLaterOpenBtn = document.getElementById("payLaterOpen");
+const payLaterCloseBtn = document.getElementById("payLaterClose");
+const payLaterSummaryEl = document.getElementById("payLaterSummary");
+const payLaterListEl = document.getElementById("payLaterList");
+
 const actionModal = document.getElementById("actionModal");
 const actionTitleEl = document.getElementById("actionTitle");
 const actionCloseBtn = document.getElementById("actionClose");
@@ -1327,6 +1384,8 @@ const actionNoteLabel = actionForm.querySelector(`label[for="actionNoteInput"]`)
 const actionNoteInput = document.getElementById("actionNoteInput");
 const actionPaymentTypeLabel = document.getElementById("actionPaymentTypeLabel");
 const actionPaymentTypeSelect = document.getElementById("actionPaymentTypeSelect");
+const actionCustomerNameLabel = document.getElementById("actionCustomerNameLabel");
+const actionCustomerNameInput = document.getElementById("actionCustomerNameInput");
 const actionPinInput = document.getElementById("actionPinInput");
 const actionConfirmBtn = document.getElementById("actionConfirm");
 const actionErrorEl = document.getElementById("actionError");
@@ -1338,7 +1397,6 @@ const MIN_SUMMARY_OVERRIDE_MS = 10000;
 
 /** 点 Cart 才打开 drawer */
 document.querySelector(".sell-summary").addEventListener("click",()=>{
-  if(Object.keys(cart).length === 0) return;
   renderCartPreview();
   cartDrawer.classList.add("open");
 });
@@ -1419,6 +1477,30 @@ promotionOpenBtnEl.addEventListener("click", openPromotionModal);
 promotionCloseBtn.addEventListener("click", closePromotionModal);
 promotionModal.addEventListener("click", (e)=>{
   if (e.target === promotionModal) closePromotionModal();
+});
+
+payLaterOpenBtn?.addEventListener("click", openPayLaterModal);
+payLaterCloseBtn?.addEventListener("click", closePayLaterModal);
+payLaterModal?.addEventListener("click", (e)=>{
+  if (e.target === payLaterModal) closePayLaterModal();
+});
+
+payLaterListEl?.addEventListener("click", async (e)=>{
+  const payoffBtn = e.target.closest("[data-payoff-sale-request-id]");
+  if (!payoffBtn) return;
+
+  const saleRequestId = decodeURIComponent(String(payoffBtn.getAttribute("data-payoff-sale-request-id") || "").trim());
+  if (!saleRequestId) return;
+
+  payoffBtn.disabled = true;
+  try{
+    await payoffPayLaterItem(saleRequestId);
+    setSummaryOverride("Pay later paid off ✓", 2200);
+  }catch(err){
+    setSummaryOverride(err?.message || "Payoff failed", 2600);
+  }finally{
+    payoffBtn.disabled = false;
+  }
 });
 
 promotionApplyBtn.addEventListener("click", ()=>{
@@ -1611,6 +1693,113 @@ async function postJson(url, body, extraHeaders = {}){
   return data;
 }
 
+async function getJsonWithAuth(path){
+  const endpoint = apiUrl(path);
+  const attempts = [
+    { url: endpoint, options: { headers: { "X-API-Key": API_KEY } } },
+    { url: `${endpoint}?api_key=${encodeURIComponent(API_KEY)}`, options: {} },
+    { url: endpoint, options: {} }
+  ];
+
+  let lastError = "Request failed";
+  for (const attempt of attempts){
+    try{
+      const res = await fetch(attempt.url, attempt.options);
+      if (res.ok) return await res.json();
+      const detail = (await res.text().catch(()=>"")).trim();
+      lastError = detail || `HTTP ${res.status}`;
+      if (res.status !== 401 && res.status !== 403) break;
+    }catch(err){
+      lastError = err?.message || "network error";
+    }
+  }
+  throw new Error(lastError);
+}
+
+async function loadPayLaterSummary(){
+  return getJsonWithAuth("api/pay-later/summary");
+}
+
+async function loadPayLaterOpenList(){
+  return getJsonWithAuth("api/pay-later/open");
+}
+
+function renderPayLaterSummary(data){
+  const openCount = Number(data?.open_count || 0);
+  const openAmount = Number(data?.open_amount || 0);
+  payLaterSummaryEl.innerHTML = `
+    <div class="pay-later-summary">
+      <span>Open items: ${openCount}</span>
+      <span>Open amount: ${fmtPrice(openAmount)}</span>
+    </div>
+  `;
+}
+
+function renderPayLaterList(rows){
+  if (!Array.isArray(rows) || !rows.length){
+    payLaterListEl.innerHTML = `<div class="promo-empty">No open pay later items.</div>`;
+    return;
+  }
+
+  payLaterListEl.innerHTML = rows.map((row)=>`
+    <div class="promo-item">
+      <div class="promo-item-main">
+        <div class="promo-item-name">${escapeHtml(row.customer_name || "Unknown")}</div>
+        <div class="promo-item-meta">${fmtPrice(row.amount)} · ${escapeHtml(row.payment_type || "Pay Later")} · ${escapeHtml(row.note || "")}</div>
+        <div class="promo-item-meta">${escapeHtml(row.created_at || "")}</div>
+      </div>
+      <button class="pay-later-payoff" type="button" data-payoff-sale-request-id="${encodeURIComponent(String(row.sale_request_id || row.id || ""))}">Payoff</button>
+    </div>
+  `).join("");
+}
+
+async function refreshPayLaterPanel(){
+  const [summary, rows] = await Promise.all([loadPayLaterSummary(), loadPayLaterOpenList()]);
+  renderPayLaterSummary(summary || {});
+  renderPayLaterList(Array.isArray(rows) ? rows : []);
+}
+
+async function openPayLaterModal(){
+  payLaterModal.classList.add("open");
+  payLaterModal.setAttribute("aria-hidden", "false");
+  payLaterSummaryEl.textContent = "Loading summary...";
+  payLaterListEl.innerHTML = `<div class="promo-empty">Loading records...</div>`;
+
+  try{
+    await refreshPayLaterPanel();
+  }catch(err){
+    payLaterSummaryEl.innerHTML = `<div class="promo-empty">Failed to load summary.</div>`;
+    payLaterListEl.innerHTML = `<div class="promo-empty">${escapeHtml(err?.message || "Failed to load pay later records")}</div>`;
+  }
+}
+
+function closePayLaterModal(){
+  payLaterModal.classList.remove("open");
+  payLaterModal.setAttribute("aria-hidden", "true");
+}
+
+async function payoffPayLaterItem(saleRequestId){
+  const confirm = await openActionModal({
+    title: "Confirm Payoff",
+    confirmText: "Payoff",
+    showNote: true,
+    showPaymentType: false,
+    hintText: "Add payoff note (optional) and enter PIN."
+  });
+  if (!confirm) return;
+
+  const { note, pin } = confirm;
+  await postJson(apiUrl(`api/pay-later/${encodeURIComponent(saleRequestId)}/payoff`), {
+    request_id: crypto.randomUUID(),
+    note,
+    paid_by: "frontend"
+  }, {
+    "X-Sell-Pin": pin
+  });
+
+  await refreshPayLaterPanel();
+}
+
 
 async function refreshProductsForStockState(){
   try{
@@ -1633,6 +1822,14 @@ function closeActionModal(result = null){
   if (resolver) resolver(result);
 }
 
+function syncPayLaterCustomerField(){
+  const isPayLater = actionPaymentTypeSelect.style.display !== "none"
+    && String(actionPaymentTypeSelect.value || "") === "Pay Later";
+  actionCustomerNameLabel.style.display = isPayLater ? "" : "none";
+  actionCustomerNameInput.style.display = isPayLater ? "" : "none";
+  if (!isPayLater) actionCustomerNameInput.value = "";
+}
+
 function openActionModal({
   title,
   confirmText,
@@ -1652,6 +1849,8 @@ function openActionModal({
     actionPaymentTypeLabel.style.display = showPaymentType ? "" : "none";
     actionPaymentTypeSelect.style.display = showPaymentType ? "" : "none";
     actionPaymentTypeSelect.value = defaultPaymentType;
+    actionCustomerNameInput.value = "";
+    syncPayLaterCustomerField();
     actionPinInput.value = "";
     actionErrorEl.textContent = "";
     actionModal.classList.add("open");
@@ -1667,11 +1866,20 @@ actionModal.addEventListener("click", (e)=>{
   if (e.target === actionModal) closeActionModal(null);
 });
 
+actionPaymentTypeSelect.addEventListener("change", syncPayLaterCustomerField);
+
 actionForm.addEventListener("submit", (e)=>{
   e.preventDefault();
   const note = String(actionNoteInput.value || "");
   const pin = String(actionPinInput.value || "").trim();
   const paymentType = String(actionPaymentTypeSelect.value || "Cash").trim();
+  const customerName = String(actionCustomerNameInput.value || "").trim();
+
+  if (paymentType === "Pay Later" && !customerName){
+    actionErrorEl.textContent = "Customer name is required for Pay Later.";
+    actionCustomerNameInput.focus();
+    return;
+  }
 
   if (!pin){
     actionErrorEl.textContent = "PIN is required.";
@@ -1679,7 +1887,7 @@ actionForm.addEventListener("submit", (e)=>{
     return;
   }
 
-  closeActionModal({ note, pin, paymentType });
+  closeActionModal({ note, pin, paymentType, customerName });
 });
 
 sellBtnEl.addEventListener("click", async ()=>{
@@ -1695,7 +1903,7 @@ sellBtnEl.addEventListener("click", async ()=>{
   });
   if (!saleConfirm) return;
 
-  const { note, pin, paymentType } = saleConfirm;
+  const { note, pin, paymentType, customerName } = saleConfirm;
 
   const items = skus.map(sku => ({ sku, qty: cart[sku] }));
   const discountItems = skus
@@ -1716,12 +1924,19 @@ sellBtnEl.addEventListener("click", async ()=>{
   setSummaryOverride("Submitting...");
 
   try{
-    await postJson(apiUrl("api/sales/batch"), {
+    const saleRequestId = crypto.randomUUID();
+    const payload = {
       items,
-      request_id: crypto.randomUUID(),
+      request_id: saleRequestId,
       note,
       payment_type: paymentType || "Cash"
-    }, {
+    };
+
+    if ((paymentType || "") === "Pay Later"){
+      payload.customer_name = customerName || "";
+    }
+
+    await postJson(apiUrl("api/sales/batch"), payload, {
       "X-Sell-Pin": pin
     });
 

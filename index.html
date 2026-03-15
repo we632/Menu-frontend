@@ -1057,8 +1057,6 @@ body.preview-open{overflow:hidden}
       <div id="cartTotal"></div>
       <div id="cartTotalPrice"></div>
       <div id="cartDiscountPrice"></div>
-      <div id="cartSavingsDeduction"></div>
-      <div id="cartSavingsCustomer"></div>
 
       <div class="cart-actions">
         <button id="giftSubmit" class="cart-gift" type="button">Gift</button>
@@ -1170,9 +1168,9 @@ body.preview-open{overflow:hidden}
       <div id="actionTitle" class="action-title">Confirm Action</div>
       <button id="actionClose" class="action-close" type="button" aria-label="Close action dialog">×</button>
     </div>
-    <p class="action-hint">Please add optional note and enter PIN to continue.</p>
+    <p class="action-hint">Enter PIN to continue.</p>
     <form id="actionForm" class="action-form">
-      <label class="promo-label" for="actionNoteInput">Note (optional)</label>
+      <label class="promo-label" for="actionNoteInput">Note</label>
       <textarea id="actionNoteInput" class="action-textarea" placeholder="Add note..."></textarea>
 
       <label id="actionPaymentTypeLabel" class="promo-label" for="actionPaymentTypeSelect" style="display:none;">Payment Type</label>
@@ -1188,7 +1186,7 @@ body.preview-open{overflow:hidden}
 
       <div id="actionSavingsSection" class="action-savings-card" style="display:none;">
         <label class="savings-checkbox" for="actionUseSavingsInput">
-          <input id="actionUseSavingsInput" type="checkbox"> Use Savings (backend will settle if deduction exceeds order total)
+          <input id="actionUseSavingsInput" type="checkbox"> Use Savings
         </label>
         <div id="actionSavingsFields" style="display:none; margin-top:8px;">
           <div class="action-savings-grid">
@@ -1197,7 +1195,7 @@ body.preview-open{overflow:hidden}
               <select id="actionSavingsAccountSelect" class="promo-input"></select>
             </div>
             <div class="promo-field">
-              <label class="promo-label" for="actionSavingsDeductionInput">Savings Deduction Amount</label>
+              <label class="promo-label" for="actionSavingsDeductionInput">Deduction</label>
               <input id="actionSavingsDeductionInput" class="promo-input" type="number" min="0" step="0.01" placeholder="0.00">
             </div>
           </div>
@@ -1573,8 +1571,6 @@ const cartItemsEl = document.getElementById("cartItems");
 const cartTotalEl = document.getElementById("cartTotal");
 const cartTotalPriceEl = document.getElementById("cartTotalPrice");
 const cartDiscountPriceEl = document.getElementById("cartDiscountPrice");
-const cartSavingsDeductionEl = document.getElementById("cartSavingsDeduction");
-const cartSavingsCustomerEl = document.getElementById("cartSavingsCustomer");
 
 cartItemsEl?.addEventListener("click", (e)=>{
   const target = getEventTargetElement(e.target);
@@ -2033,11 +2029,6 @@ function renderCartPreview(){
     ? `Discount: -${fmtPrice(discountAmountTotal)}`
     : "";
 
-  const preview = checkoutState.cartPreview || {};
-  const previewSavings = roundMoney(preview?.savings_deduction_amount);
-  const previewCustomer = String(preview?.savings_customer_name || "").trim();
-  cartSavingsDeductionEl.textContent = previewSavings > 0 ? `Savings Deduction: ${fmtPrice(previewSavings)}` : "";
-  cartSavingsCustomerEl.textContent = previewCustomer ? `Savings Customer: ${previewCustomer}` : "";
 }
 
 /** Clear */
@@ -2155,7 +2146,7 @@ function syncActionSavingsAutoDeduction(){
   actionSavingsDeductionInput.value = deduction.toFixed(2);
   checkoutState.savingsDeductionAmount = deduction;
   const remainingCash = roundMoney(Math.max(0, orderTotal - deduction));
-  actionSavingsMeta.textContent = `Order ${fmtPrice(orderTotal)} · Savings ${fmtPrice(deduction)} · Remaining Cash ${fmtPrice(remainingCash)}`;
+  actionSavingsMeta.textContent = `Order ${fmtPrice(orderTotal)} · Savings ${fmtPrice(deduction)} · Cash ${fmtPrice(remainingCash)}`;
 }
 
 function syncActionSavingsWarning(){
@@ -2169,9 +2160,9 @@ function syncActionSavingsWarning(){
   const orderTotal = getCheckoutOrderTotal();
 
   if (selected && deduction > selected.balance){
-    actionSavingsWarning.textContent = `Warning: deduction exceeds account balance (${fmtPrice(selected.balance)}).`;
+    actionSavingsWarning.textContent = `Over balance (${fmtPrice(selected.balance)}).`;
   }else if (deduction > orderTotal){
-    actionSavingsWarning.textContent = `Info: deduction is above order total; backend will settle remaining amount.`;
+    actionSavingsWarning.textContent = `Over order total; backend settles rest.`;
   }else{
     actionSavingsWarning.textContent = "";
   }
@@ -2365,7 +2356,7 @@ function openActionModal({
   confirmText,
   showNote = true,
   showPaymentType = false,
-  hintText = "Please add optional note and enter PIN to continue.",
+  hintText = "Enter PIN to continue.",
   defaultPaymentType = "Cash"
 }){
   return new Promise((resolve)=>{
@@ -2430,7 +2421,7 @@ actionSavingsDeductionInput?.addEventListener("input", ()=>{
     const orderTotal = getCheckoutOrderTotal();
     const entered = roundMoney(actionSavingsDeductionInput.value);
     const remainingCash = roundMoney(Math.max(0, orderTotal - entered));
-    actionSavingsMeta.textContent = `Order ${fmtPrice(orderTotal)} · Savings ${fmtPrice(entered)} · Remaining Cash ${fmtPrice(remainingCash)}`;
+    actionSavingsMeta.textContent = `Order ${fmtPrice(orderTotal)} · Savings ${fmtPrice(entered)} · Cash ${fmtPrice(remainingCash)}`;
   }
   syncActionSavingsWarning();
 });

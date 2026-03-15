@@ -2044,6 +2044,21 @@ clearBtnEl.addEventListener("click",()=>{
 /** =========================
  *  Sell / Gift (Batch)
  * ========================= */
+function formatApiErrorMessage(data, fallback = "Request failed"){
+  if (!data || typeof data !== "object") return fallback;
+  const detail = data.detail;
+  if (typeof detail === "string" && detail.trim()) return detail.trim();
+  if (Array.isArray(detail) && detail.length){
+    const msg = detail.map((item)=>{
+      if (typeof item === "string") return item;
+      if (item && typeof item === "object" && typeof item.msg === "string") return item.msg;
+      return "";
+    }).filter(Boolean).join("; ");
+    if (msg) return msg;
+  }
+  return fallback;
+}
+
 async function postJson(url, body, extraHeaders = {}){
   const res = await fetch(url, {
     method:"POST",
@@ -2162,7 +2177,7 @@ function syncActionSavingsWarning(){
   if (selected && deduction > selected.balance){
     actionSavingsWarning.textContent = `Over balance (${fmtPrice(selected.balance)}).`;
   }else if (deduction > orderTotal){
-    actionSavingsWarning.textContent = `Over order total; backend settles rest.`;
+    actionSavingsWarning.textContent = `Over order total.`;
   }else{
     actionSavingsWarning.textContent = "";
   }
@@ -2463,6 +2478,12 @@ actionForm.addEventListener("submit", (e)=>{
 
   if (useSavings && savingsDeductionAmount < 0){
     actionErrorEl.textContent = "Savings deduction amount cannot be negative.";
+    actionSavingsDeductionInput.focus();
+    return;
+  }
+
+  if (useSavings && savingsDeductionAmount > getCheckoutOrderTotal()){
+    actionErrorEl.textContent = "Savings deduction cannot exceed order total.";
     actionSavingsDeductionInput.focus();
     return;
   }

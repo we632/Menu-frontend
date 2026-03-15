@@ -2525,17 +2525,12 @@ sellBtnEl.addEventListener("click", async ()=>{
   const { note, pin, paymentType, customerName, useSavings, savingsCustomerName, savingsDeductionAmount } = saleConfirm;
 
   const items = skus.map(sku => ({ sku, qty: cart[sku] }));
-  const discountItems = skus
-    .map((sku)=>{
-      const lossAmount = roundMoney(discountAmountBySku.get(sku));
-      const discountQty = toWholeQty(cart[sku]);
-      return {
-        sku,
-        qty: discountQty,
-        loss_amount: lossAmount,
-      };
-    })
-    .filter((item)=> item.qty >= 1 && item.loss_amount > 0);
+  const discountItems = Array.from(discountAmountBySku.entries())
+    .map(([sku, discountAmount])=>({
+      sku,
+      discount_amount: roundMoney(discountAmount),
+    }))
+    .filter((item)=> item.discount_amount > 0);
 
   sellBtnEl.disabled = true;
   promotionOpenBtnEl.disabled = true;
@@ -2560,24 +2555,13 @@ sellBtnEl.addEventListener("click", async ()=>{
       payload.savings_deduction_amount = savingsDeductionAmount;
     }
 
+    if (discountItems.length){
+      payload.discount_items = discountItems;
+    }
+
     const saleResult = await postJson(apiUrl("api/sales/batch"), payload, {
       "X-Sell-Pin": pin
     });
-
-    let discountError = "";
-    if (discountItems.length){
-      try{
-        await postJson(apiUrl("api/losses/batch"), {
-          items: discountItems,
-          request_id: crypto.randomUUID(),
-          loss_type: "DISCOUNT"
-        }, {
-          "X-Sell-Pin": pin
-        });
-      }catch(err){
-        discountError = err?.message || "Discount write failed";
-      }
-    }
 
     for(const k of Object.keys(cart)) delete cart[k];
     discountAmountBySku.clear();
@@ -2589,22 +2573,36 @@ sellBtnEl.addEventListener("click", async ()=>{
     checkoutState.cartPreview = saleResult?.cart_preview && typeof saleResult.cart_preview === "object"
       ? saleResult.cart_preview
       : {
+          gross_total: saleResult?.gross_total ?? saleResult?.total_amount,
+          discount_total: saleResult?.discount_total,
+          net_total: saleResult?.net_total,
           total_amount: saleResult?.total_amount,
           savings_deduction_amount: saleResult?.savings_deduction_amount,
           cash_amount: saleResult?.cash_amount,
+          pay_later_amount: saleResult?.pay_later_amount,
+          payment_type: saleResult?.payment_type || paymentType,
           savings_customer_name: saleResult?.savings_customer_name,
         };
 
-    const resultTotal = roundMoney(checkoutState.cartPreview?.total_amount);
-    const resultSavings = roundMoney(checkoutState.cartPreview?.savings_deduction_amount);
-    const resultCash = roundMoney(checkoutState.cartPreview?.cash_amount);
-    const splitSummary = `Total ${fmtPrice(resultTotal)} · Savings ${fmtPrice(resultSavings)} · Cash ${fmtPrice(resultCash)}`;
+    const preview = checkoutState.cartPreview || {};
+    const resultGross = roundMoney(preview?.gross_total ?? preview?.total_amount);
+    const resultDiscount = roundMoney(preview?.discount_total);
+    const resultNet = roundMoney(preview?.net_total ?? Math.max(0, resultGross - resultDiscount));
+    const resultSavings = roundMoney(preview?.savings_deduction_amount);
+    const resultCash = roundMoney(preview?.cash_amount);
+    const resultPayLater = roundMoney(preview?.pay_later_amount);
+    const resultPaymentType = normalizePaymentType(preview?.payment_type || paymentType) || paymentType || "Cash";
 
-    if (discountError){
-      setSummaryOverride(`Sold, discount failed: ${discountError}`, 3200);
-    }else{
-      setSummaryOverride(`Sold ✓ ${splitSummary}`, 10000);
+    const summaryParts = [`Net ${fmtPrice(resultNet)}`];
+    if (resultDiscount > 0){
+      summaryParts.unshift(`Discount ${fmtPrice(resultDiscount)}`);
+      summaryParts.unshift(`Gross ${fmtPrice(resultGross)}`);
     }
+    if (resultSavings > 0) summaryParts.push(`Savings ${fmtPrice(resultSavings)}`);
+    if (resultPayLater > 0) summaryParts.push(`Pay Later ${fmtPrice(resultPayLater)}`);
+    else summaryParts.push(`${resultPaymentType} ${fmtPrice(resultCash)}`);
+
+    setSummaryOverride(`Sold ✓ ${summaryParts.join(" · ")}`, 10000);
   }catch(err){
     setSummaryOverride(err?.message || "Sell failed", 3000);
   }finally{

@@ -1476,12 +1476,28 @@ function getDiscountPortionTotal(){
   return roundPortionQty(total);
 }
 
+let scheduledUiFrame = 0;
+let scheduledCartPreviewRefresh = false;
+
+function scheduleCartUiRefresh({ cartPreview = false } = {}){
+  scheduledCartPreviewRefresh = scheduledCartPreviewRefresh || Boolean(cartPreview);
+  if (scheduledUiFrame) return;
+
+  scheduledUiFrame = requestAnimationFrame(()=>{
+    const shouldRenderCartPreview = scheduledCartPreviewRefresh && cartDrawer.classList.contains("open");
+    scheduledUiFrame = 0;
+    scheduledCartPreviewRefresh = false;
+    updateUI();
+    if (shouldRenderCartPreview) renderCartPreview();
+  });
+}
+
 function setQty(sku, qty){
   const meta = productMetaBySku.get(String(sku));
   if (meta && meta.orderable === false){
     delete cart[sku];
     discountAmountBySku.delete(String(sku));
-    updateUI();
+    scheduleCartUiRefresh({ cartPreview: true });
     return;
   }
 
@@ -1493,12 +1509,7 @@ function setQty(sku, qty){
     cart[sku] = q;
   }
 
-  updateUI();
-  if (cartDrawer.classList.contains("open")) renderCartPreview();
-  if (promotionModal.classList.contains("open")){
-    refreshPromotionSkuOptions();
-    renderPromotionList();
-  }
+  scheduleCartUiRefresh({ cartPreview: true });
 }
 
 function updateQtyControls(){
@@ -1887,8 +1898,7 @@ promotionApplyBtn.addEventListener("click", ()=>{
   discountAmountBySku.set(sku, discountAmount);
   promotionAmountInput.value = "";
   renderPromotionList();
-  updateUI();
-  if (cartDrawer.classList.contains("open")) renderCartPreview();
+  scheduleCartUiRefresh({ cartPreview: true });
 });
 
 promotionListEl.addEventListener("click", (e)=>{
@@ -1901,8 +1911,7 @@ promotionListEl.addEventListener("click", (e)=>{
   if (!sku) return;
   discountAmountBySku.delete(sku);
   renderPromotionList();
-  updateUI();
-  if (cartDrawer.classList.contains("open")) renderCartPreview();
+  scheduleCartUiRefresh({ cartPreview: true });
 });
 
 function updateUI(){
@@ -2037,8 +2046,7 @@ clearBtnEl.addEventListener("click",()=>{
   discountAmountBySku.clear();
   checkoutState.cartPreview = null;
   closePromotionModal();
-  updateUI();
-  if (cartDrawer.classList.contains("open")) renderCartPreview();
+  scheduleCartUiRefresh({ cartPreview: true });
 });
 
 /** =========================
@@ -2338,7 +2346,6 @@ async function refreshProductsForStockState(){
   try{
     const products = await loadProducts();
     renderMenu(products);
-    updateUI();
   }catch(err){
     console.error("refresh products failed", err);
   }
@@ -2566,8 +2573,8 @@ sellBtnEl.addEventListener("click", async ()=>{
     for(const k of Object.keys(cart)) delete cart[k];
     discountAmountBySku.clear();
     closePromotionModal();
+    scheduleCartUiRefresh({ cartPreview: true });
     await refreshProductsForStockState();
-    updateUI();
     if (cartDrawer.classList.contains("open")) cartDrawer.classList.remove("open");
 
     checkoutState.cartPreview = saleResult?.cart_preview && typeof saleResult.cart_preview === "object"
@@ -2605,8 +2612,6 @@ sellBtnEl.addEventListener("click", async ()=>{
     setSummaryOverride(`Sold ✓ ${summaryParts.join(" · ")}`, 10000);
   }catch(err){
     setSummaryOverride(err?.message || "Sell failed", 3000);
-  }finally{
-    updateUI();
   }
 });
 
@@ -2645,15 +2650,13 @@ giftBtnEl?.addEventListener("click", async ()=>{
     for(const k of Object.keys(cart)) delete cart[k];
     discountAmountBySku.clear();
     closePromotionModal();
+    scheduleCartUiRefresh({ cartPreview: true });
     await refreshProductsForStockState();
-    updateUI();
     if (cartDrawer.classList.contains("open")) cartDrawer.classList.remove("open");
 
     setSummaryOverride("Gift recorded ✓", 10000);
   }catch(err){
     setSummaryOverride(err?.message || "Gift failed", 3000);
-  }finally{
-    updateUI();
   }
 });
 
@@ -2858,7 +2861,6 @@ function renderMenu(products){
     }
     const products = await loadProducts();
     renderMenu(products);
-    updateUI();
   }catch(e){
     console.error(e);
     menuRoot.innerHTML = `<div class="menu-error" role="alert">⚠️ Failed to load menu. Please check backend/API and refresh.</div>`;

@@ -593,6 +593,7 @@ body.preview-open{overflow:hidden}
   margin-top: 12px;
   display:flex;
   gap:10px;
+  flex-wrap:wrap;
 }
 
 .cart-savings-wrap{
@@ -1060,6 +1061,7 @@ body.preview-open{overflow:hidden}
 
       <div class="cart-actions">
         <button id="giftSubmit" class="cart-gift" type="button">Gift</button>
+        <button id="lostSubmit" class="cart-gift" type="button">Lost</button>
         <button id="payLaterOpen" class="cart-gift" type="button">Pay Later</button>
       </div>
       <div class="cart-savings-wrap">
@@ -1575,6 +1577,7 @@ const promotionOpenBtnEl = document.getElementById("promotionOpen");
 const savingsOpenBtnEl = document.getElementById("savingsOpen");
 const clearBtnEl = document.getElementById("clearCart");
 const giftBtnEl = document.getElementById("giftSubmit");
+const lostBtnEl = document.getElementById("lostSubmit");
 
 const cartDrawer = document.getElementById("cartDrawer");
 const cartClose = document.getElementById("cartClose");
@@ -1961,6 +1964,7 @@ function updateUI(){
     promotionOpenBtnEl.disabled = true;
     clearBtnEl.disabled = true;
     if (giftBtnEl) giftBtnEl.disabled = true;
+    if (lostBtnEl) lostBtnEl.disabled = true;
     closePromotionModal();
   }else{
     defaultSummary = `${totalQty} item(s)`;
@@ -1971,6 +1975,7 @@ function updateUI(){
     promotionOpenBtnEl.disabled = false;
     clearBtnEl.disabled = false;
     if (giftBtnEl) giftBtnEl.disabled = false;
+    if (lostBtnEl) lostBtnEl.disabled = false;
   }
 
   summaryTextEl.textContent = summaryOverrideText || defaultSummary;
@@ -2616,32 +2621,63 @@ sellBtnEl.addEventListener("click", async ()=>{
 });
 
 giftBtnEl?.addEventListener("click", async ()=>{
+  await submitCartLoss({
+    buttonEl: giftBtnEl,
+    lossType: "GIFT",
+    title: "Confirm Gift",
+    confirmText: "Submit Gift",
+    pendingText: "Submitting gift...",
+    successText: "Gift recorded ✓",
+    failureText: "Gift failed",
+  });
+});
+
+lostBtnEl?.addEventListener("click", async ()=>{
+  await submitCartLoss({
+    buttonEl: lostBtnEl,
+    lossType: "LOST",
+    title: "Confirm Lost Items",
+    confirmText: "Submit Lost",
+    pendingText: "Submitting lost items...",
+    successText: "Lost recorded ✓",
+    failureText: "Lost submit failed",
+  });
+});
+
+async function submitCartLoss({
+  buttonEl,
+  lossType,
+  title,
+  confirmText,
+  pendingText,
+  successText,
+  failureText,
+}){
   const skus = Object.keys(cart);
   if(!skus.length) return;
 
-  const giftConfirm = await openActionModal({
-    title: "Confirm Gift / Discount",
-    confirmText: "Submit Gift",
-    showNote: true
+  const confirm = await openActionModal({
+    title,
+    confirmText,
+    showNote: true,
+    hintText: "Add note (optional) and enter PIN. Loss amount will use cost price."
   });
-  if (!giftConfirm) return;
+  if (!confirm) return;
 
-  const { note, pin } = giftConfirm;
+  const { note, pin } = confirm;
 
-  giftBtnEl.disabled = true;
-  setSummaryOverride("Submitting gift...");
+  if (giftBtnEl) giftBtnEl.disabled = true;
+  if (lostBtnEl) lostBtnEl.disabled = true;
+  if (buttonEl) buttonEl.disabled = true;
+  setSummaryOverride(pendingText);
 
   try{
-    const items = skus.map((sku) => {
-      const qty = cart[sku];
-      const lossAmount = roundMoney(getUnitPrice(sku) * qty);
-      return { sku, qty, loss_amount: lossAmount };
-    });
+    const items = skus.map((sku) => ({ sku, qty: cart[sku] }));
 
     await postJson(apiUrl("api/losses/batch"), {
       items,
       request_id: crypto.randomUUID(),
-      loss_type: "GIFT",
+      loss_type: lossType,
       note
     }, {
       "X-Sell-Pin": pin
@@ -2654,11 +2690,13 @@ giftBtnEl?.addEventListener("click", async ()=>{
     await refreshProductsForStockState();
     if (cartDrawer.classList.contains("open")) cartDrawer.classList.remove("open");
 
-    setSummaryOverride("Gift recorded ✓", 10000);
+    setSummaryOverride(successText, 10000);
   }catch(err){
-    setSummaryOverride(err?.message || "Gift failed", 3000);
+    setSummaryOverride(err?.message || failureText, 3000);
+  }finally{
+    updateUI();
   }
-});
+}
 
 /** =========================
  *  Image preview (delegation)

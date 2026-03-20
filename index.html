@@ -1183,8 +1183,9 @@ body.preview-open{overflow:hidden}
         <option value="Pay Later">Pay Later</option>
       </select>
 
-      <label id="actionCustomerNameLabel" class="promo-label" for="actionCustomerNameInput" style="display:none;">Customer Name</label>
-      <input id="actionCustomerNameInput" class="action-pin" type="text" style="display:none;" autocomplete="off" placeholder="Enter customer name">
+      <label id="actionCustomerNameLabel" class="promo-label" for="actionCustomerNameSelect" style="display:none;">Customer Name</label>
+      <select id="actionCustomerNameSelect" class="promo-input" style="display:none;"></select>
+      <input id="actionCustomerNameCustomInput" class="action-pin" type="text" style="display:none;" autocomplete="off" placeholder="Enter new customer name">
 
       <div id="actionSavingsSection" class="action-savings-card" style="display:none;">
         <label class="savings-checkbox" for="actionUseSavingsInput">
@@ -1242,6 +1243,7 @@ const checkoutState = {
   paymentType: "Cash",
   useSavings: false,
   savingsAccounts: [],
+  payLaterCustomers: [],
   selectedSavingsCustomerName: "",
   savingsDeductionAmount: 0,
   cartPreview: null,
@@ -1639,7 +1641,8 @@ const actionNoteInput = document.getElementById("actionNoteInput");
 const actionPaymentTypeLabel = document.getElementById("actionPaymentTypeLabel");
 const actionPaymentTypeSelect = document.getElementById("actionPaymentTypeSelect");
 const actionCustomerNameLabel = document.getElementById("actionCustomerNameLabel");
-const actionCustomerNameInput = document.getElementById("actionCustomerNameInput");
+const actionCustomerNameSelect = document.getElementById("actionCustomerNameSelect");
+const actionCustomerNameCustomInput = document.getElementById("actionCustomerNameCustomInput");
 const actionSavingsSection = document.getElementById("actionSavingsSection");
 const actionUseSavingsInput = document.getElementById("actionUseSavingsInput");
 const actionSavingsFields = document.getElementById("actionSavingsFields");
@@ -2121,6 +2124,25 @@ async function loadPayLaterOpenList(){
   return getJsonWithAuth("api/pay-later/open");
 }
 
+async function loadPayLaterOpenCustomers(){
+  const rows = await loadPayLaterOpenList();
+  const unique = new Set();
+  const customers = [];
+  for (const row of (Array.isArray(rows) ? rows : [])){
+    const customerName = String(row?.customer_name || "").trim();
+    const remainingAmount = roundMoney(
+      row?.remaining_amount !== undefined && row?.remaining_amount !== null
+        ? row.remaining_amount
+        : row?.amount
+    );
+    if (!customerName || remainingAmount <= 0 || unique.has(customerName)) continue;
+    unique.add(customerName);
+    customers.push(customerName);
+  }
+  checkoutState.payLaterCustomers = customers.sort((a,b)=> a.localeCompare(b));
+  return checkoutState.payLaterCustomers;
+}
+
 async function loadSavingsAccounts(){
   const rows = await getJsonWithAuth("api/savings/accounts?available_only=true");
   const accounts = Array.isArray(rows) ? rows : [];
@@ -2373,9 +2395,41 @@ function syncPayLaterCustomerField(){
     && String(actionPaymentTypeSelect.value || "") === "Pay Later";
   checkoutState.paymentType = String(actionPaymentTypeSelect.value || "Cash");
   actionCustomerNameLabel.style.display = isPayLater ? "" : "none";
-  actionCustomerNameInput.style.display = isPayLater ? "" : "none";
-  if (!isPayLater) actionCustomerNameInput.value = "";
+  actionCustomerNameSelect.style.display = isPayLater ? "" : "none";
+  if (!isPayLater){
+    actionCustomerNameSelect.value = "";
+    actionCustomerNameCustomInput.style.display = "none";
+    actionCustomerNameCustomInput.value = "";
+  }else{
+    const useCustomCustomer = String(actionCustomerNameSelect.value || "") === "__new__";
+    actionCustomerNameCustomInput.style.display = useCustomCustomer ? "" : "none";
+    if (!useCustomCustomer) actionCustomerNameCustomInput.value = "";
+  }
   syncActionSavingsUI();
+}
+
+function renderPayLaterCustomerOptions(){
+  actionCustomerNameSelect.innerHTML = "";
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "Select open customer";
+  actionCustomerNameSelect.appendChild(placeholder);
+
+  for (const customerName of checkoutState.payLaterCustomers){
+    const option = document.createElement("option");
+    option.value = customerName;
+    option.textContent = customerName;
+    actionCustomerNameSelect.appendChild(option);
+  }
+
+  const newOption = document.createElement("option");
+  newOption.value = "__new__";
+  newOption.textContent = "+ Add new customer";
+  actionCustomerNameSelect.appendChild(newOption);
+
+  actionCustomerNameSelect.value = checkoutState.payLaterCustomers.length ? "" : "__new__";
+  actionCustomerNameCustomInput.value = "";
+  actionCustomerNameCustomInput.style.display = actionCustomerNameSelect.value === "__new__" ? "" : "none";
 }
 
 function openActionModal({
@@ -2403,7 +2457,7 @@ function openActionModal({
     actionUseSavingsInput.checked = false;
     actionSavingsDeductionInput.value = "0";
     actionSavingsMeta.textContent = "";
-    actionCustomerNameInput.value = "";
+    renderPayLaterCustomerOptions();
     syncPayLaterCustomerField();
     actionPinInput.value = "";
     actionErrorEl.textContent = "";
@@ -2422,6 +2476,7 @@ actionModal.addEventListener("click", (e)=>{
 });
 
 actionPaymentTypeSelect.addEventListener("change", syncPayLaterCustomerField);
+actionCustomerNameSelect?.addEventListener("change", syncPayLaterCustomerField);
 
 actionUseSavingsInput?.addEventListener("change", ()=>{
   checkoutState.useSavings = actionUseSavingsInput.checked;
@@ -2458,7 +2513,10 @@ actionForm.addEventListener("submit", (e)=>{
   const note = String(actionNoteInput.value || "");
   const pin = String(actionPinInput.value || "").trim();
   const paymentType = normalizePaymentType(actionPaymentTypeSelect.value || "Cash");
-  const customerName = String(actionCustomerNameInput.value || "").trim();
+  const selectedCustomerValue = String(actionCustomerNameSelect.value || "").trim();
+  const customerName = selectedCustomerValue === "__new__"
+    ? String(actionCustomerNameCustomInput.value || "").trim()
+    : selectedCustomerValue;
   const useSavings = Boolean(actionUseSavingsInput.checked);
   const savingsCustomerName = String(actionSavingsAccountSelect.value || "").trim();
   const selectedSavings = getSelectedSavingsAccount();
@@ -2472,7 +2530,8 @@ actionForm.addEventListener("submit", (e)=>{
 
   if (paymentType === "Pay Later" && !customerName){
     actionErrorEl.textContent = "Customer name is required for Pay Later.";
-    actionCustomerNameInput.focus();
+    if (selectedCustomerValue === "__new__") actionCustomerNameCustomInput.focus();
+    else actionCustomerNameSelect.focus();
     return;
   }
 
@@ -2523,6 +2582,11 @@ sellBtnEl.addEventListener("click", async ()=>{
     await loadSavingsAccounts();
   }catch(err){
     checkoutState.savingsAccounts = [];
+  }
+  try{
+    await loadPayLaterOpenCustomers();
+  }catch(err){
+    checkoutState.payLaterCustomers = [];
   }
 
   const saleConfirm = await openActionModal({

@@ -180,6 +180,26 @@ body.preview-open{overflow:hidden}
   gap:6px;
 }
 
+.qty-control.qty-control-manual{
+  gap:8px;
+  padding:4px 6px;
+  border-radius:999px;
+  border:1px solid #ffd4c7;
+  background:linear-gradient(180deg,#fffaf7,#fff3ed);
+  box-shadow:0 8px 16px rgba(255,126,95,.14);
+}
+
+.qty-control.qty-control-manual .qty-btn{
+  width:30px;
+  height:30px;
+  border-radius:999px;
+  box-shadow:none;
+}
+
+.qty-control.qty-control-manual .qty-btn.minus{
+  background:#4b5563;
+}
+
 .qty-unavailable{
   display:inline-flex;
   align-items:center;
@@ -242,6 +262,34 @@ body.preview-open{overflow:hidden}
   text-align: center;
   font-weight: 900;
   font-size: 15px;
+}
+
+.qty-input{
+  width:56px;
+  height:30px;
+  border:1px solid #ffd4c7;
+  border-radius:999px;
+  text-align:center;
+  font-weight:800;
+  font-size:15px;
+  color:#111827;
+  background:#fff;
+}
+
+.qty-input::-webkit-outer-spin-button,
+.qty-input::-webkit-inner-spin-button{
+  -webkit-appearance:none;
+  margin:0;
+}
+
+.qty-input[type=number]{
+  -moz-appearance:textfield;
+}
+
+.qty-input:focus{
+  outline: 2px solid rgba(255,126,95,.35);
+  outline-offset: 1px;
+  border-color: #ff7e5f;
 }
 
 /* ===== Bottom sell bar ===== */
@@ -1351,6 +1399,11 @@ function getCategoryOrderIndex(category){
   return CATEGORY_ORDER.indexOf(normalizeCategoryKey(category));
 }
 
+function canEditQtyDirectly(category){
+  const key = normalizeCategoryKey(category);
+  return key === "uber" || key === "other";
+}
+
 function fmtPrice(n){
   const v = Number(n);
   return Number.isFinite(v) ? `$${v.toFixed(2)}` : "$0.00";
@@ -1523,8 +1576,9 @@ function updateQtyControls(){
     if (!container) return;
 
     const orderable = item.dataset.orderable !== "false";
+    const meta = productMetaBySku.get(String(sku));
+    container.classList.remove("qty-control-manual");
     if (!orderable){
-      const meta = productMetaBySku.get(String(sku));
       const reason = String(meta?.unavailableLabel || "Unavailable");
       const unavailableType = String(meta?.unavailableType || "").toLowerCase();
       const typeClass = unavailableType ? ` qty-unavailable-${unavailableType}` : "";
@@ -1537,6 +1591,18 @@ function updateQtyControls(){
     }
 
     const qty = getQty(sku);
+    const manualEntry = canEditQtyDirectly(meta?.category);
+
+    if (manualEntry){
+      container.classList.add("qty-control-manual");
+      container.innerHTML = `
+        <button class="qty-btn minus" type="button" aria-label="Decrease quantity" ${qty <= 0 ? "disabled" : ""}>−</button>
+        <input class="qty-input" type="number" min="0" step="1" inputmode="numeric" value="${qty}" aria-label="Quantity for ${escapeHtml(meta?.name || sku)}">
+        <button class="qty-btn plus" type="button" aria-label="Increase quantity">+</button>
+      `;
+      return;
+    }
+
     if (qty === 0){
       container.innerHTML = `<button class="qty-btn plus" type="button">+</button>`;
     } else {
@@ -1568,6 +1634,30 @@ document.addEventListener("click",(e)=>{
   if (item.dataset.orderable === "false") return;
   if (plus) setQty(sku, getQty(sku) + 1);
   if (minus) setQty(sku, getQty(sku) - 1);
+});
+
+
+document.addEventListener("change", (e)=>{
+  const target = getEventTargetElement(e.target);
+  if (!target || !target.classList?.contains("qty-input")) return;
+
+  const item = target.closest(".item[data-sku]");
+  if (!item) return;
+
+  const sku = item.dataset.sku;
+  const meta = productMetaBySku.get(String(sku));
+  if (!canEditQtyDirectly(meta?.category)) return;
+
+  setQty(sku, target.value);
+});
+
+document.addEventListener("keydown", (e)=>{
+  const target = getEventTargetElement(e.target);
+  if (!target || !target.classList?.contains("qty-input")) return;
+
+  if (e.key !== "Enter") return;
+  e.preventDefault();
+  target.blur();
 });
 
 /** =========================

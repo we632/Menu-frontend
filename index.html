@@ -244,6 +244,23 @@ body.preview-open{overflow:hidden}
   font-size: 15px;
 }
 
+.qty-input{
+  width: 66px;
+  height: 34px;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  text-align: center;
+  font-weight: 800;
+  font-size: 15px;
+  color: #111827;
+}
+
+.qty-input:focus{
+  outline: 2px solid rgba(255,126,95,.35);
+  outline-offset: 1px;
+  border-color: #ff7e5f;
+}
+
 /* ===== Bottom sell bar ===== */
 :root{ --sellBarH: 92px; }
 
@@ -1351,6 +1368,11 @@ function getCategoryOrderIndex(category){
   return CATEGORY_ORDER.indexOf(normalizeCategoryKey(category));
 }
 
+function canEditQtyDirectly(category){
+  const key = normalizeCategoryKey(category);
+  return key === "uber" || key === "other";
+}
+
 function fmtPrice(n){
   const v = Number(n);
   return Number.isFinite(v) ? `$${v.toFixed(2)}` : "$0.00";
@@ -1523,8 +1545,8 @@ function updateQtyControls(){
     if (!container) return;
 
     const orderable = item.dataset.orderable !== "false";
+    const meta = productMetaBySku.get(String(sku));
     if (!orderable){
-      const meta = productMetaBySku.get(String(sku));
       const reason = String(meta?.unavailableLabel || "Unavailable");
       const unavailableType = String(meta?.unavailableType || "").toLowerCase();
       const typeClass = unavailableType ? ` qty-unavailable-${unavailableType}` : "";
@@ -1537,6 +1559,17 @@ function updateQtyControls(){
     }
 
     const qty = getQty(sku);
+    const manualEntry = canEditQtyDirectly(meta?.category);
+
+    if (manualEntry){
+      container.innerHTML = `
+        <button class="qty-btn minus" type="button" ${qty <= 0 ? "disabled" : ""}>−</button>
+        <input class="qty-input" type="number" min="0" step="1" inputmode="numeric" value="${qty}" aria-label="Quantity for ${escapeHtml(meta?.name || sku)}">
+        <button class="qty-btn plus" type="button">+</button>
+      `;
+      return;
+    }
+
     if (qty === 0){
       container.innerHTML = `<button class="qty-btn plus" type="button">+</button>`;
     } else {
@@ -1568,6 +1601,30 @@ document.addEventListener("click",(e)=>{
   if (item.dataset.orderable === "false") return;
   if (plus) setQty(sku, getQty(sku) + 1);
   if (minus) setQty(sku, getQty(sku) - 1);
+});
+
+
+document.addEventListener("change", (e)=>{
+  const target = getEventTargetElement(e.target);
+  if (!target || !target.classList?.contains("qty-input")) return;
+
+  const item = target.closest(".item[data-sku]");
+  if (!item) return;
+
+  const sku = item.dataset.sku;
+  const meta = productMetaBySku.get(String(sku));
+  if (!canEditQtyDirectly(meta?.category)) return;
+
+  setQty(sku, target.value);
+});
+
+document.addEventListener("keydown", (e)=>{
+  const target = getEventTargetElement(e.target);
+  if (!target || !target.classList?.contains("qty-input")) return;
+
+  if (e.key !== "Enter") return;
+  e.preventDefault();
+  target.blur();
 });
 
 /** =========================

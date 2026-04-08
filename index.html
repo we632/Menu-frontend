@@ -180,6 +180,26 @@ body.preview-open{overflow:hidden}
   gap:6px;
 }
 
+.qty-control.qty-control-manual{
+  gap:8px;
+  padding:4px 6px;
+  border-radius:999px;
+  border:1px solid #ffd4c7;
+  background:linear-gradient(180deg,#fffaf7,#fff3ed);
+  box-shadow:0 8px 16px rgba(255,126,95,.14);
+}
+
+.qty-control.qty-control-manual .qty-btn{
+  width:30px;
+  height:30px;
+  border-radius:999px;
+  box-shadow:none;
+}
+
+.qty-control.qty-control-manual .qty-btn.minus{
+  background:#4b5563;
+}
+
 .qty-unavailable{
   display:inline-flex;
   align-items:center;
@@ -245,14 +265,25 @@ body.preview-open{overflow:hidden}
 }
 
 .qty-input{
-  width: 66px;
-  height: 34px;
-  border: 1px solid #d1d5db;
-  border-radius: 10px;
-  text-align: center;
-  font-weight: 800;
-  font-size: 15px;
-  color: #111827;
+  width:56px;
+  height:30px;
+  border:1px solid #ffd4c7;
+  border-radius:999px;
+  text-align:center;
+  font-weight:800;
+  font-size:15px;
+  color:#111827;
+  background:#fff;
+}
+
+.qty-input::-webkit-outer-spin-button,
+.qty-input::-webkit-inner-spin-button{
+  -webkit-appearance:none;
+  margin:0;
+}
+
+.qty-input[type=number]{
+  -moz-appearance:textfield;
 }
 
 .qty-input:focus{
@@ -1546,6 +1577,7 @@ function updateQtyControls(){
 
     const orderable = item.dataset.orderable !== "false";
     const meta = productMetaBySku.get(String(sku));
+    container.classList.remove("qty-control-manual");
     if (!orderable){
       const reason = String(meta?.unavailableLabel || "Unavailable");
       const unavailableType = String(meta?.unavailableType || "").toLowerCase();
@@ -1562,10 +1594,11 @@ function updateQtyControls(){
     const manualEntry = canEditQtyDirectly(meta?.category);
 
     if (manualEntry){
+      container.classList.add("qty-control-manual");
       container.innerHTML = `
-        <button class="qty-btn minus" type="button" ${qty <= 0 ? "disabled" : ""}>−</button>
+        <button class="qty-btn minus" type="button" aria-label="Decrease quantity" ${qty <= 0 ? "disabled" : ""}>−</button>
         <input class="qty-input" type="number" min="0" step="1" inputmode="numeric" value="${qty}" aria-label="Quantity for ${escapeHtml(meta?.name || sku)}">
-        <button class="qty-btn plus" type="button">+</button>
+        <button class="qty-btn plus" type="button" aria-label="Increase quantity">+</button>
       `;
       return;
     }
